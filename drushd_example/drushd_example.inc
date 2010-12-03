@@ -13,18 +13,27 @@ class DrushDaemonExample extends DrushDaemon {
   }
 
   protected function process() {
-    // Don't forget to put the process in hibernation if nothing needs to be done!
-    drush_print('well hello there');
+    //sleep(1);
+    drush_log('well hello there', 'ok');
+
+    // Here you'd put some sort of check to see if this process succeeded.
+    if (TRUE) {
+      $this->successes_since_feedback++;
+      $this->total_successes++;
+    }
+    $this->total_processed++;
+    $this->processed_since_feedback++;
+
+    // Only return FALSE if something happens that should stop all the processes.
     return TRUE;
   }
 
   protected function needsProcessing() {
-    static $i = 0;
-    return $i++ > 3;
+    return TRUE;
   }
 
   protected function exampleHealthCheck() {
     static $i = 0;
-    return $i++ < 100;
+    return $i++ < 1200;
   }
 }

@@ -39,7 +39,6 @@ function drushd_example_drush_command() {
  * Process function for drushd-example-simple 
  */
 function drushd_example_process() {
-  drush_print('hi');
   return TRUE;
 }
 

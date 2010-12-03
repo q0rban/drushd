@@ -20,11 +20,28 @@ class StatusHandler {
   protected $daemon;
 
   /**
+   * The timestamp of when the status was last written to file.
+   *
+   * @var int
+   */
+  protected $lastWritten;
+  public function getLastWritten() { return $this->lastWritten; }
+
+  /**
    * The process ID.
    *
    * @var int
    */
   protected $pid;
+  public function getPid() { return $this->pid; }
+
+  /**
+   * The command that was reforked.
+   *
+   * @var string
+   */
+  protected $reforkedCommand = '';
+  public function getReforkedCommand() { return $this->reforkedCommand; }
 
   /**
    * The current status.
@@ -62,9 +79,6 @@ class StatusHandler {
     $this->statusTTL = $daemon->getStatusTTL();
     $this->detectStatusFilename();
     $this->detectStatus();
-    if ($daemon->isDaemon()) {
-      $this->pid = posix_getpid();
-    }
   }
 
   protected function detectStatusFilename() {
@@ -83,6 +97,9 @@ class StatusHandler {
     if ($items = $this->readStatusFile()) {
       $this->statusLastRead = time();
       $this->status = $items['status'];
+      $this->lastWritten = $items['last_written'];
+      $this->pid = isset($items['pid']) ? $items['pid'] : NULL;
+      $this->reforkedCommand = isset($items['reforked_command']) ? $items['reforked_command'] : NULL;
     }
     else {
       $this->status = StatusHandler::STOPPED;
@@ -124,6 +141,12 @@ class StatusHandler {
     // Only save a new pid if this is the daemonized process.
     $items = $this->daemon->isDaemon() ? array('pid' => posix_getpid()) : $this->readStatusFile();
     $items['status'] = $this->status;
+    $items['last_written'] = $this->lastWritten = time();
+
+    // If we're reforking, store the reforked command.
+    if ($this->status == StatusHandler::REFORKING) {
+      $items['reforked_command'] = $this->daemon->getCommand();
+    }
 
     $json = json_encode($items);
 
@@ -155,10 +178,13 @@ class StatusHandler {
    */
   public function logStatus($type = 'notice', $message = NULL, $t_args = NULL) {
     if (!isset($t_args)) {
-      $t_args = array('@status' => $this->getStatus());
+      $t_args = array(
+        '@status' => $this->getStatus(),
+        '@drush-cmd' => $this->daemon->getDrushCommand(),
+      );
     }
     if (!isset($message)) {
-      $message = 'This process is currently @status.';
+      $message = 'The @drush-cmd process is currently @status.';
     }
 
     drush_log(dt($message, $t_args), $type);

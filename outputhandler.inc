@@ -3,50 +3,52 @@
 
 /**
  * @file
- * 
+ * Output handler, to log all drush_print, drush_log, etc to a log file.
  */
 
 class OutputHandler {
-  private $_filename;
-  private $_fp = null;
+  private $filename;
+  private $logFile = null;
+  private $lastClose;
 
   public function __construct($filename) {
     $this->setFilename($filename);
   }
 
   public function __destruct() {
-    if($this->_fp) {
+    if($this->logFile) {
       $this->end();
     }
   }
 
   public function setFilename($filename) {
-    $this->_filename = $filename;
+    $this->filename = $filename;
   }
 
   public function getFilename() {
-    return $this->_filename;
+    return $this->filename;
   }
 
   public function start() {
-    $this->_fp = @fopen($this->_filename,'w');
+    $this->logFile = @fopen($this->filename,'a+');
   
-    if(!$this->_fp) {
-      throw new Exception('Cannot open '.$this->_filename.' for writing!');
+    if(!$this->logFile) {
+      throw new Exception('Cannot open '. $this->filename. ' for writing!');
     }
 
-    ob_start(array($this,'outputWriter'));
+    ob_start(array($this, 'outputWriter'));
   }
 
   public function end() {
     @ob_end_flush();
-    if($this->_fp)
-      fclose($this->_fp);
-    
-    $this->_fp = null;
+    if($this->logFile) {
+      fclose($this->logFile);
+    }
+
+    $this->logFile = null;
   }
 
   public function outputWriter($buffer) {
-    fwrite($this->_fp,$buffer);
+    fwrite($this->logFile, $buffer);
   }
 }
