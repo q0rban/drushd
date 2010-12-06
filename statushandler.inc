@@ -20,11 +20,18 @@ class StatusHandler {
   protected $daemon;
 
   /**
+   * When the command was last reforked.
+   *
+   * @var int
+   */
+  public $lastReforked;
+
+  /**
    * The timestamp of when the status was last written to file.
    *
    * @var int
    */
-  protected $lastWritten;
+  public $lastWritten;
   public function getLastWritten() { return $this->lastWritten; }
 
   /**
@@ -32,7 +39,7 @@ class StatusHandler {
    *
    * @var int
    */
-  protected $pid;
+  public $pid;
   public function getPid() { return $this->pid; }
 
   /**
@@ -40,7 +47,7 @@ class StatusHandler {
    *
    * @var string
    */
-  protected $reforkedCommand = '';
+  public $reforkedCommand;
   public function getReforkedCommand() { return $this->reforkedCommand; }
 
   /**
@@ -48,7 +55,7 @@ class StatusHandler {
    *
    * @var string
    */
-  static protected $status;
+  public $status;
 
   /**
    * The path to the status file, containing current status and process id.
@@ -79,6 +86,9 @@ class StatusHandler {
     $this->statusTTL = $daemon->getStatusTTL();
     $this->detectStatusFilename();
     $this->detectStatus();
+    if ($this->daemon->isDaemon()) {
+      $this->pid = posix_getpid();
+    }
   }
 
   protected function detectStatusFilename() {
@@ -94,12 +104,8 @@ class StatusHandler {
   }
 
   protected function detectStatus() {
-    if ($items = $this->readStatusFile()) {
-      $this->statusLastRead = time();
-      $this->status = $items['status'];
-      $this->lastWritten = $items['last_written'];
-      $this->pid = isset($items['pid']) ? $items['pid'] : NULL;
-      $this->reforkedCommand = isset($items['reforked_command']) ? $items['reforked_command'] : NULL;
+    if ($this->readStatusFile()) {
+      drupal_log('The status file has been read.');
     }
     else {
       $this->status = StatusHandler::STOPPED;
@@ -131,6 +137,11 @@ class StatusHandler {
    */
   public function setStatus($status, $log = TRUE) {
     $this->status = $status;
+    // If we're reforking, store the reforked command.
+    if ($status == StatusHandler::REFORKING) {
+      $this->reforkedCommand = $this->daemon->getCommand();
+      $this->lastReforked = time();
+    }
     $this->writeStatusFile();
     if ($log) {
       $this->logStatus();
@@ -138,28 +149,21 @@ class StatusHandler {
   }
 
   protected function writeStatusFile() {
-    // Only save a new pid if this is the daemonized process.
-    $items = $this->daemon->isDaemon() ? array('pid' => posix_getpid()) : $this->readStatusFile();
-    $items['status'] = $this->status;
-    $items['last_written'] = $this->lastWritten = time();
-
-    // If we're reforking, store the reforked command.
-    if ($this->status == StatusHandler::REFORKING) {
-      $items['reforked_command'] = $this->daemon->getCommand();
-    }
-
-    $json = json_encode($items);
-
     $file = fopen($this->statusFilename, 'w');
-    fwrite($file, $json);
+    fwrite($file, $this);
     fclose($file);
+    $this->lastWritten = time();
   }
 
   protected function readStatusFile() {
     // Just to be sure the file status is correct, clear out the stat cache.
     clearstatcache();
     if (file_exists($this->statusFilename) && $json = file_get_contents($this->statusFilename)) {
-      return json_decode($json, TRUE);
+      $this->statusLastRead = time();
+
+      foreach (json_decode($json, TRUE) as $key => $value) {
+        $this->$key = $value;
+      }
     }
     return FALSE;
   }
@@ -188,5 +192,9 @@ class StatusHandler {
     }
 
     drush_log(dt($message, $t_args), $type);
+  }
+
+  public function __toString() {
+    return json_encode($this);
   }
 }

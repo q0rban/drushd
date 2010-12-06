@@ -90,7 +90,7 @@ class DrushDaemon {
    *
    * @var string
    */
-  protected $needsProcessCallback;
+  protected $needsProcessingCallback;
 
   /**
    * The output handler object.
