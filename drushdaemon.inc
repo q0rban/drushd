@@ -5,9 +5,9 @@ class DrushDaemon {
    * Process result constants.
    */
   const RESULT_PROCESSING  = 1; // Healthy process
-  const RESULT_HIBERNATING = 2; // The process has interrupted itself (e.g., the
+  const RESULT_HIBERNATING = 2; // The process is hibernating.
   const RESULT_INCOMPLETE  = 3; // The process has interrupted itself (e.g., the
-                               // memory limit is approaching)
+                                // memory limit is approaching)
   const RESULT_STOPPED     = 4; // The process was stopped externally
   const RESULT_FAILED      = 5; // The process had a fatal error
 
@@ -64,11 +64,11 @@ class DrushDaemon {
   protected $forkingCommands = array('start', 'resume');
 
   /**
-   * The front end exit return value.
+   * The front end exit return value. Zero is success.
    *
    * @var int
    */
-  protected $frontendReturn = 1;
+  protected $frontendReturn = 0;
 
   /**
    * Methods to call during health check.
@@ -105,12 +105,20 @@ class DrushDaemon {
   protected $processCallback;
 
   /**
+   * The refork limit per minute, to protect against refork loops. This is the
+   * number of allowable reforks per minute.
+   *
+   * @var int
+   */
+  protected $reforkLimitPerMin = 10;
+
+  /**
    * Queue this process for reforking.
    *
    * @var bool
    */
   protected $refork = FALSE;
-  public function refork() {
+  public function queueRefork() {
     $this->refork = TRUE;
     $this->setStatus(StatusHandler::REFORKING);
   }
@@ -173,7 +181,7 @@ class DrushDaemon {
     $output = $this->$command();
     // If reforking is required, do it!
     if ($this->refork) {
-      $this->fork();
+      $this->refork();
     }
     return $output;
   }
@@ -188,6 +196,27 @@ class DrushDaemon {
     $options = drush_get_context('options');
     $options['debug'] = TRUE;
     drush_backend_fork($cmd, $options);
+  }
+
+  protected function refork() {
+    // Let's make sure we're not in a reforking loop first.
+    if (isset($this->statusHandler->reforks[$this->command])) {
+      $reforks = $this->statusHandler->reforks[$this->command];
+      $count = count($reforks);
+      $first = array_shift($reforks);
+      $last = array_pop($reforks);
+      $duration = ($last - $first) / 60;
+
+      // If we've exceeded at our refork limit, and it's less than a minute, throw
+      // an error and stop the process.
+      if ($count >= $this->reforkLimitPerMin && $duration < 1) {
+        drush_log(dt('The refork limit has been exceeded for this process. Please check the memory requirements and available memory and try again.'), 'error');
+        $this->setStatus(StatusHandler::STOPPED);
+        $this->frontendReturn = 1;
+        return;
+      }
+    }
+    $this->fork();
   }
 
 
@@ -228,7 +257,7 @@ class DrushDaemon {
     else {
       $log_type = 'error';
       $status = $this->getStatus(TRUE);
-      if ($status == StatusHandler::STARTED || $status == StatusHandler::HIBERNATING) {
+      if ($status == StatusHandler::STARTED || $status == StatusHandler::HIBERNATING || $status == StatusHandler::REFORKING) {
         $log_type = $this->_stop($status);
       }
       $this->statusHandler->logStatus($log_type);
@@ -242,6 +271,9 @@ class DrushDaemon {
     }
     if ($this->getStatus() == StatusHandler::HIBERNATING) {
       drush_log(dt('Last hibernation cycle was at @date', array('@date' => date("M d Y H:i:s", $this->statusHandler->getLastWritten()))), 'ok');
+    }
+    if (drush_get_context('DRUSH_VERBOSE')) {
+      drush_print($this->statusHandler);
     }
   }
 
@@ -455,14 +487,11 @@ class DrushDaemon {
 
     $message = "Processed !successes!failed in !time sec (!perminute/min)";
     switch ($result) {
-      case DrushDaemon::RESULT_PROCESSING:
-        $message .= " - done";
-        $type = 'completed';
-        break;
       case DrushDaemon::RESULT_FAILED:
         $message .= " - failure";
         $type = 'failed';
         break;
+      case DrushDaemon::RESULT_PROCESSING:
       case DrushDaemon::RESULT_INCOMPLETE:
         $message .= " - continuing";
         $type = 'ok';
@@ -567,7 +596,7 @@ class DrushDaemon {
         '!limit' => format_size($memory_limit),
       );
       drush_log(dt('Memory usage is !usage (!pct% of limit !limit), starting new batch', $t_args), 'warning');
-      $this->refork();
+      $this->queueRefork();
     }
     // This is not a fatal error, so always return TRUE.
     return TRUE;

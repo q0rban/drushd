@@ -20,13 +20,6 @@ class StatusHandler {
   protected $daemon;
 
   /**
-   * When the command was last reforked.
-   *
-   * @var int
-   */
-  public $lastReforked;
-
-  /**
    * The timestamp of when the status was last written to file.
    *
    * @var int
@@ -56,6 +49,13 @@ class StatusHandler {
    */
   public $reforkedCommand;
   public function getReforkedCommand() { return $this->reforkedCommand; }
+
+  /**
+   * An array of timestamps of when a command was reforked, keyed by command.
+   *
+   * @var array
+   */
+  public $reforks;
 
   /**
    * The current status.
@@ -147,7 +147,8 @@ class StatusHandler {
     // If we're reforking, store the reforked command.
     if ($status == StatusHandler::REFORKING) {
       $this->reforkedCommand = $this->daemon->getCommand();
-      $this->lastReforked = time();
+      // Store the timestamp of this refork.
+      $this->reforks[$this->reforkedCommand][] = time();
     }
     // Write the file, without re-reading from disk first.
     $this->writeStatusFile(FALSE);
