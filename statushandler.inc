@@ -43,6 +43,13 @@ class StatusHandler {
   public function getPid() { return $this->pid; }
 
   /**
+   * An array of items that need processing.
+   *
+   * @var array
+   */
+  public $processItems = array();
+
+  /**
    * The command that was reforked.
    *
    * @var string
@@ -105,7 +112,7 @@ class StatusHandler {
 
   protected function detectStatus() {
     if ($this->readStatusFile()) {
-      drupal_log('The status file has been read.');
+      drush_log(dt('The status file has been read.'));
     }
     else {
       $this->status = StatusHandler::STOPPED;
@@ -142,17 +149,29 @@ class StatusHandler {
       $this->reforkedCommand = $this->daemon->getCommand();
       $this->lastReforked = time();
     }
-    $this->writeStatusFile();
+    // Write the file, without re-reading from disk first.
+    $this->writeStatusFile(FALSE);
     if ($log) {
       $this->logStatus();
     }
   }
 
-  protected function writeStatusFile() {
+  /**
+   * Write this object to disk.
+   *
+   * @param bool $refresh_status
+   *   If this is set to TRUE, the status will be re-read from disk before writing.
+   */
+  public function writeStatusFile($refresh_status = TRUE) {
+    if ($refresh_status) {
+      // Force a re-read of the status first, in case it has changed on disk.
+      $this->getStatus(TRUE);
+    }
     $file = fopen($this->statusFilename, 'w');
     fwrite($file, $this);
     fclose($file);
     $this->lastWritten = time();
+    drush_log(dt('The status file has been written.'));
   }
 
   protected function readStatusFile() {
@@ -162,8 +181,14 @@ class StatusHandler {
       $this->statusLastRead = time();
 
       foreach (json_decode($json, TRUE) as $key => $value) {
-        $this->$key = $value;
+        // The initial read will set up all these values, but we don't want to
+        // overwrite the variables with the ones on disk after the initial load,
+        // unless it's the status variable, of course. :)
+        if (!isset($this->$key) || $key == 'status') {
+          $this->$key = $value;
+        }
       }
+      return TRUE;
     }
     return FALSE;
   }

@@ -61,7 +61,7 @@ class DrushDaemon {
    *
    * @var array
    */
-  protected $forkingCommands = array('start');
+  protected $forkingCommands = array('start', 'resume');
 
   /**
    * The front end exit return value.
@@ -98,6 +98,13 @@ class DrushDaemon {
   protected $outputHandler;
 
   /**
+   * Optional process callback function for non-OOP drush command processes.
+   *
+   * @var string
+   */
+  protected $processCallback;
+
+  /**
    * Queue this process for reforking.
    *
    * @var bool
@@ -129,9 +136,9 @@ class DrushDaemon {
 
   function __construct($command) {
     $this->drushCommandArray = $command;
-    $this->setDaemon((boolean) drush_get_context('DRUSH_BACKEND'));
+    $this->drushCommand = $command['command'];
+    $this->isDaemon = (boolean) drush_get_context('DRUSH_BACKEND');
     $this->customizeOptions();
-    $this->detectDrushCommand();
     $this->detectCommand();
     $this->detectOptions();
     $this->detectFilepaths();
@@ -148,7 +155,7 @@ class DrushDaemon {
 
   public function backendInvoke() {
     drush_set_context('DRUSH_LOG_CALLBACK', '_drushd_print_log');
-    $this->setDaemon(TRUE);
+    $this->isDaemon = TRUE;
     $this->outputHandler = new OutputHandler($this->logFilename);
     $this->outputHandler->start();
 
@@ -187,14 +194,22 @@ class DrushDaemon {
 
   protected function start() {
     if ($this->getStatus() == StatusHandler::STOPPED || $this->isReforking()) {
-      $this->beginProcess();
-      $this->iterateProcess();
-      if ($this->getStatus() != StatusHandler::REFORKING) {
-        $this->endProcess();
-      }
+      $this->_start();
     }
     else {
       $this->statusHandler->logStatus('error');
+    }
+  }
+
+  protected function resume() {
+    $this->_start();
+  }
+
+  protected function _start() {
+    $this->beginProcess();
+    $this->iterateProcess();
+    if ($this->getStatus() != StatusHandler::REFORKING) {
+      $this->endProcess();
     }
   }
 
@@ -222,7 +237,9 @@ class DrushDaemon {
 
   protected function status() {
     $this->statusHandler->logStatus('success');
-    drush_log(dt('The process Id for this process is !pid', array('!pid' => $this->statusHandler->getPid())));
+    if ($pid = $this->statusHandler->getPid()) {
+      drush_log(dt('The process Id for this process is !pid', array('!pid' => $pid)));
+    }
     if ($this->getStatus() == StatusHandler::HIBERNATING) {
       drush_log(dt('Last hibernation cycle was at @date', array('@date' => date("M d Y H:i:s", $this->statusHandler->getLastWritten()))), 'ok');
     }
@@ -390,8 +407,8 @@ class DrushDaemon {
    * Here's the actual meat of the daemon, where each process occurs.
    */
   protected function process() {
-    if (isset($this->drushCommandArray['daemon']['process callback'])) {
-      $callback = $this->drushCommandArray['daemon']['process callback'];
+    if (isset($this->processCallback)) {
+      $callback = $this->processCallback;
       if (function_exists($callback)) {
         return $callback();
       }
@@ -434,51 +451,39 @@ class DrushDaemon {
     else {
       $perminute = '?';
     }
+    $failed = $this->processed_since_feedback - $this->successes_since_feedback;
 
+    $message = "Processed !successes!failed in !time sec (!perminute/min)";
     switch ($result) {
       case DrushDaemon::RESULT_PROCESSING:
-        $basetext = "Processed !successes (!failed failed) in !time sec (!perminute/min) - done";
+        $message .= " - done";
         $type = 'completed';
         break;
       case DrushDaemon::RESULT_FAILED:
-        $basetext = "Processed !successes (!failed failed) in !time sec (!perminute/min) - failure";
+        $message .= " - failure";
         $type = 'failed';
         break;
       case DrushDaemon::RESULT_INCOMPLETE:
-        $basetext = "Processed !successes (!failed failed) in !time sec (!perminute/min) - continuing";
+        $message .= " - continuing";
         $type = 'ok';
         break;
       case DrushDaemon::RESULT_STOPPED:
-        $basetext = "Processed !successes (!failed failed) in !time sec (!perminute/min) - stopped";
+        $message .= " - stopped";
         $type = 'warning';
         break;
     }
-    $message = t($basetext,
-        array('!numitems' => $this->processed_since_feedback,
-              '!successes' => $this->successes_since_feedback,
-              '!failed' => $this->processed_since_feedback - $this->successes_since_feedback,
-              '!time' => $time,
-              '!perminute' => $perminute));
-    drush_log($message, $type);
 
-    // Report on lookup_cache hit rate. Only visible at 'debug' level.
-    if ($result != DrushDaemon::RESULT_INCOMPLETE && !empty($this->counts['lookup_cache'])) {
-      foreach ($this->counts['lookup_cache'] as $name => $tallies) {
-        $tallies += array('hit' => 0, 'miss_hit' => 0, 'miss_miss' => 0); // Set defaults to avoid NOTICE.
-        $sum = $tallies['hit']+$tallies['miss_hit']+$tallies['miss_miss'];
-        drush_log(
-          t('Lookup cache: !mn SM=!name !hit hit, !miss_hit miss_hit, !miss_miss miss_miss (!total total).', array(
-                '!mn' => $this->machineName,
-                '!name' => $name,
-                '!hit' => round((100*$tallies['hit'])/$sum) . '%',
-                '!miss_hit' => round((100*$tallies['miss_hit'])/$sum) . '%',
-                '!miss_miss' => round((100*$tallies['miss_miss'])/$sum) . '%',
-                '!total' => $sum
-        )), 'debug');
-      }
-      $this->counts['lookup_cache'] = array();
-    }
-    if ($result == DrushDaemon::RESULT_INCOMPLETE) {
+    $dt_args = array(
+      '!numitems' => $this->processed_since_feedback,
+      '!successes' => $this->successes_since_feedback,
+      '!failed' => $failed > 0 ? t(' (!failed failed)', array('!failed' => $failed)) : '',
+      '!time' => $time,
+      '!perminute' => $perminute,
+    );
+
+    drush_log(dt($message, $dt_args), $type);
+
+    if ($result == DrushDaemon::RESULT_PROCESSING) {
       $this->lastfeedback = time();
       $this->processed_since_feedback = $this->successes_since_feedback = 0;
     }
@@ -505,10 +510,6 @@ class DrushDaemon {
 
   public function getPid() {
     return $this->statusHandler->getPid();
-  }
-
-  protected function setDaemon($is_daemon = FALSE) {
-    $this->isDaemon = (boolean) $is_daemon;
   }
 
   protected function customizeOptions() {
@@ -554,12 +555,6 @@ class DrushDaemon {
       $this->logFilename = "$filepath/$filename";
     }
   }
-
-  protected function detectDrushCommand() {
-    $args = drush_get_arguments();
-    $this->drushCommand = array_shift($args);
-  }
-
 
   protected function checkMemoryUsage() {
     $memory_limit = DrushDaemon::getMemoryLimit();

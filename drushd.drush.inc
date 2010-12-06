@@ -9,6 +9,8 @@ function drushd_drush_init() {
     $class = isset($command['daemon']['class']) ? $command['daemon']['class'] : 'DrushDaemon';
     drushd_include_files($command);
 
+    // Necessary evil for simple callbacks.
+    global $daemon;
     $daemon = new $class($command);
 
     // If we're in the backend, assume this is the daemon process.
@@ -45,6 +47,7 @@ function _drushd_print_log($entry) {
 
 function drushd_include_files($command) {
   require_once 'drushdaemon.inc';
+  require_once 'processitemsdaemon.inc';
   require_once 'outputhandler.inc';
   require_once 'statushandler.inc';
 
