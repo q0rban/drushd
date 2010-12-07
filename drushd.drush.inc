@@ -42,7 +42,46 @@ function drush_drushd() {
 }
 
 function _drushd_print_log($entry) {
-  drush_print($entry['message']);
+  $dt_args = array(
+    '@date' => date('[d-M-Y G:i:s]', time()),
+    '@type' => $entry['type'],
+    '@message' => $entry['message'],
+  );
+  $message = wordwrap(dt('@date [@type] @message', $dt_args));
+
+  $verbose = drush_get_context('DRUSH_VERBOSE');
+  $debug = drush_get_context('DRUSH_DEBUG');
+
+  $return = TRUE;
+  switch ($entry['type']) {
+    case 'failed' :
+    case 'error' :
+      $return = FALSE;
+      break;
+    case 'warning' :
+    case 'ok' :
+    case 'completed' :
+    case 'success' :
+      // Pass through to printing.
+      break;
+    case 'notice' :
+    case 'message' :
+    case 'info' :
+      if (!$verbose) {
+        // print nothing. exit cleanly.
+        return TRUE;
+      }
+      break;
+    default :
+      if (!$debug) {
+        // print nothing. exit cleanly.
+        return TRUE;
+      }
+      break;
+  }
+
+  drush_print($message);
+  return $return;
 }
 
 function drushd_include_files($command) {

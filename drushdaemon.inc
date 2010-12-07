@@ -194,7 +194,6 @@ class DrushDaemon {
     $args = drush_get_arguments();
     $cmd = implode(' ', $args);
     $options = drush_get_context('options');
-    $options['debug'] = TRUE;
     drush_backend_fork($cmd, $options);
   }
 
