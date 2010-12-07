@@ -86,30 +86,27 @@ class StatusHandler {
    */
   protected $statusTTL;
 
-
-
-  public function __construct(DrushDaemon $daemon) {
+  /**
+   * Constructor.
+   *
+   * @param DrushDaemon $daemon
+   *   The DrushDaemon object.
+   * @param string $filename
+   *   The filename for the status file.
+   */
+  public function __construct(DrushDaemon $daemon, $filename) {
     $this->daemon = $daemon;
     $this->statusTTL = $daemon->getStatusTTL();
-    $this->detectStatusFilename();
+    $this->statusFilename = $filename;
     $this->detectStatus();
     if ($this->daemon->isDaemon()) {
       $this->pid = posix_getpid();
     }
   }
 
-  protected function detectStatusFilename() {
-    $path_aliases = _core_path_aliases();
-
-    $name = str_replace('-', '_', $this->daemon->getDrushCommand());
-
-    $filepath = $path_aliases['%root'] .'/'. $path_aliases['%files'];
-    $filename = 'drushd_'. $name .'.txt';
-    $fullpath = $filepath .'/'. $filename;
-
-    $this->statusFilename = $fullpath;
-  }
-
+  /**
+   * Detect the current status of this process.
+   */
   protected function detectStatus() {
     if ($this->readStatusFile()) {
       drush_log(dt('The status file has been read.'));
@@ -129,6 +126,9 @@ class StatusHandler {
     return $this->status;
   }
 
+  /**
+   * Determine if the status file needs to be re-read.
+   */
   public function statusNeedsRefresh() {
     $now = time();
     return ($now - $this->statusLastRead) >= $this->statusTTL;
@@ -175,6 +175,15 @@ class StatusHandler {
     drush_log(dt('The status file has been written.'));
   }
 
+  /**
+   * Read the status file, and populate instance variables as needed. If instance
+   * variables have already been set, they will not be overwritten by the file,
+   * except for the case of status. We always want to read a fresh status in from
+   * the file, in case another process has queued this for stopping or restarting.
+   *
+   * @return bool
+   *   TRUE if the file was successfully read.
+   */
   protected function readStatusFile() {
     // Just to be sure the file status is correct, clear out the stat cache.
     clearstatcache();
@@ -220,6 +229,9 @@ class StatusHandler {
     drush_log(dt($message, $t_args), $type);
   }
 
+  /**
+   * Convert this object to json as a string.
+   */
   public function __toString() {
     return json_encode($this);
   }

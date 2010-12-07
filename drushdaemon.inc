@@ -118,14 +118,13 @@ class DrushDaemon {
    * @var bool
    */
   protected $refork = FALSE;
-  public function queueRefork() {
-    $this->refork = TRUE;
-    $this->setStatus(StatusHandler::REFORKING);
-  }
 
-  public function isReforking() {
-    return ($this->getStatus() == StatusHandler::REFORKING) && ($this->statusHandler->getReforkedCommand() == $this->getCommand());
-  }
+  /**
+   * The file name and path of the status file.
+   *
+   * @var string
+   */
+  protected $statusFilename;
 
   /**
    * The status handler object.
@@ -141,7 +140,12 @@ class DrushDaemon {
   protected $statusTTL = 30;
   public function getStatusTTL() { return $this->statusTTL; }
 
-
+  /**
+   * Constructor.
+   *
+   * @param $command
+   *   The Drush command array.
+   */
   function __construct($command) {
     $this->drushCommandArray = $command;
     $this->drushCommand = $command['command'];
@@ -150,8 +154,15 @@ class DrushDaemon {
     $this->detectCommand();
     $this->detectOptions();
     $this->detectFilepaths();
-    $this->statusHandler = new StatusHandler($this);
+    $this->statusHandler = new StatusHandler($this, $this->statusFilename);
   }
+
+
+
+  /**
+   * Command Relay
+   * =============
+   */
 
   /**
    * Summon a daemon for this command, by forking.
@@ -161,6 +172,9 @@ class DrushDaemon {
     drush_log('The daemon has started', 'success');
   }
 
+  /**
+   * The command has been forked, and is now being called via the backend.
+   */
   public function backendInvoke() {
     drush_set_context('DRUSH_LOG_CALLBACK', '_drushd_print_log');
     $this->isDaemon = TRUE;
@@ -176,6 +190,12 @@ class DrushDaemon {
     $this->outputHandler->end();
   }
 
+  /**
+   * Calls up the command method directly.
+   *
+   * @return mixed
+   *   The command callback output.
+   */
   public function callCommandMethod() {
     $command = $this->command;
     $output = $this->$command();
@@ -186,10 +206,9 @@ class DrushDaemon {
     return $output;
   }
 
-  public function commandRequiresFork() {
-    return in_array($this->command, $this->forkingCommands);
-  }
-
+  /**
+   * Fork the command
+   */
   protected function fork() {
     $args = drush_get_arguments();
     $cmd = implode(' ', $args);
@@ -197,6 +216,10 @@ class DrushDaemon {
     drush_backend_fork($cmd, $options);
   }
 
+  /**
+   * Refork the current command. Ensures that reforking doesn't exceed certian
+   * limits per minute.
+   */
   protected function refork() {
     // Let's make sure we're not in a reforking loop first.
     if (isset($this->statusHandler->reforks[$this->command])) {
@@ -218,8 +241,30 @@ class DrushDaemon {
     $this->fork();
   }
 
+  /**
+   * Queue this process to refork.
+   */
+  public function queueRefork() {
+    $this->refork = TRUE;
+    $this->setStatus(StatusHandler::REFORKING);
+  }
+
+  /**
+   * Check to see if this process is currently reforking.
+   */
+  public function isReforking() {
+    return ($this->getStatus() == StatusHandler::REFORKING) && ($this->statusHandler->getReforkedCommand() == $this->getCommand());
+  }
 
 
+  /**
+   * Command Callbacks
+   * =================
+   */
+
+  /**
+   * Start up the process. This is a forking command.
+   */
   protected function start() {
     if ($this->getStatus() == StatusHandler::STOPPED || $this->isReforking()) {
       $this->_start();
@@ -229,10 +274,16 @@ class DrushDaemon {
     }
   }
 
+  /**
+   * Resume the process. This is a forking command.
+   */
   protected function resume() {
     $this->_start();
   }
 
+  /**
+   * Helper to resume and start.
+   */
   protected function _start() {
     $this->beginProcess();
     $this->iterateProcess();
@@ -241,6 +292,25 @@ class DrushDaemon {
     }
   }
 
+  /**
+   * Return a status about the current process.
+   */
+  protected function status() {
+    $this->statusHandler->logStatus('success');
+    if ($pid = $this->statusHandler->getPid()) {
+      drush_log(dt('The process Id for this process is !pid', array('!pid' => $pid)));
+    }
+    if ($this->getStatus() == StatusHandler::HIBERNATING) {
+      drush_log(dt('Last hibernation cycle was at @date', array('@date' => date("M d Y H:i:s", $this->statusHandler->getLastWritten()))), 'ok');
+    }
+    if (drush_get_context('DRUSH_VERBOSE')) {
+      drush_print($this->statusHandler);
+    }
+  }
+
+  /**
+   * Stop the process.
+   */
   protected function stop() {
     if (drush_get_option('kill', FALSE) && $this->statusHandler->getPid()) {
       $command = 'kill '. $this->statusHandler->getPid();
@@ -257,41 +327,45 @@ class DrushDaemon {
       $log_type = 'error';
       $status = $this->getStatus(TRUE);
       if ($status == StatusHandler::STARTED || $status == StatusHandler::HIBERNATING || $status == StatusHandler::REFORKING) {
-        $log_type = $this->_stop($status);
+        $log_type = $this->queueStatusChange($status, StatusHandler::STOPPING, StatusHandler::STOPPED);
       }
       $this->statusHandler->logStatus($log_type);
     }
   }
 
-  protected function status() {
-    $this->statusHandler->logStatus('success');
-    if ($pid = $this->statusHandler->getPid()) {
-      drush_log(dt('The process Id for this process is !pid', array('!pid' => $pid)));
+  /**
+   * Restart the process by reforking.
+   */
+  protected function restart() {
+    $log_type = 'error';
+    $status = $this->getStatus(TRUE);
+    if ($status == StatusHandler::STARTED || $status == StatusHandler::HIBERNATING) {
+      $log_type = $this->queueStatusChange($status, StatusHandler::REFORKING, StatusHandler::STARTED);
     }
-    if ($this->getStatus() == StatusHandler::HIBERNATING) {
-      drush_log(dt('Last hibernation cycle was at @date', array('@date' => date("M d Y H:i:s", $this->statusHandler->getLastWritten()))), 'ok');
-    }
-    if (drush_get_context('DRUSH_VERBOSE')) {
-      drush_print($this->statusHandler);
-    }
+    $this->statusHandler->logStatus($log_type);
   }
 
   /**
-   * Helper to $this->stop(). Does all the dirty work of stopping and checking the
-   * status and timeout, etc.
+   * Helper to queue a change in status. Does all the dirty work of checking the
+   * status and timeout, etc. Both 'restart' and 'stop' commands call this method,
+   * so check there for usage.
    *
-   * @param string $status
-   *   The StatusHandler status recorded before the stop command was called.
+   * @param string $current_status
+   *   The StatusHandler status recorded before the method was called.
+   * @param string $transition_status
+   *   The status that queues the change, e.g. STOPPING, REFORKING
+   * @param string $desired_status
+   *   The desired status to achieve, for instance STOPPED, or STARTED.
    * @return string
    *   The drush log type, 'success' or 'error'.
    */
-  protected function _stop($status) {
+  protected function queueStatusChange($current_status, $transition_status, $desired_status) {
     $queue = drush_get_option('queue', FALSE);
     $timeout = drush_get_option('timeout', 45);
-    if ($status == StatusHandler::HIBERNATING && !$queue) {
+    if ($current_status == StatusHandler::HIBERNATING && !$queue) {
       $delay = $this->hibernateDuration > 60 ? ceil($this->hibernateDuration / 60) .' minute' : $this->hibernateDuration .' second';
       drush_log(dt('This process is currently hibernating. Expect about a @delay delay.', array('@delay' => $delay)), 'warning');
-      $opts = array("I'll wait around, thanks.", "Just queue it to stop and get me the heck out of here!");
+      $opts = array("I'll wait around, thanks.", "Just queue it up and get me the heck out of here!");
       $choice = drush_choice($opts, dt('Watcha wanna do?'));
       if ($choice === 1) {
         $queue = TRUE;
@@ -311,10 +385,10 @@ class DrushDaemon {
 
     $start = $time = time();
 
-    $this->setStatus(StatusHandler::STOPPING);
+    $this->setStatus($transition_status);
     if (!$queue) {
-      drush_log(dt('The status TTL is !num seconds, so expect to wait around at least that long.', array('!num' => $this->statusTTL)), 'ok');
-      while ($this->getStatus(TRUE) == StatusHandler::STOPPING && $time - $start < $timeout) {
+      drush_log(dt('The status TTL is !num seconds, so expect a wait.', array('!num' => $this->statusTTL)), 'ok');
+      while ($this->getStatus(TRUE) == $transition_status && $time - $start < $timeout) {
         $this->statusHandler->logStatus();
         // Sleep for 5 seconds.
         sleep(5);
@@ -327,15 +401,18 @@ class DrushDaemon {
 
     // Get a fresh status. If we're just queuing to stop, we can't assume that
     // we get an error.
-    return $queue || $this->getStatus(TRUE) == StatusHandler::STOPPED ? 'success' : 'error';
-  }
-
-  protected function restart() {
-    
+    return $queue || $this->getStatus(TRUE) == $desired_status ? 'success' : 'error';
   }
 
 
+  /**
+   * Process Handling Functions
+   * ==========================
+   */
 
+  /**
+   * Sets up the process for starting.
+   */
   protected function beginProcess() {
     $this->statusHandler->SetStatus(StatusHandler::STARTED, FALSE);
     $this->statusHandler->logStatus('notice', 'The process has started.');
@@ -345,6 +422,9 @@ class DrushDaemon {
       $this->processed_since_feedback = $this->successes_since_feedback = 0;
   }
 
+  /**
+   * Here's where the actual processing occurs.
+   */
   protected function iterateProcess() {
     $result = DrushDaemon::RESULT_PROCESSING;
     $process_result = TRUE;
@@ -364,7 +444,35 @@ class DrushDaemon {
   }
 
   /**
-   * 
+   * If you are extending this class, you NEED to implement this method, or the
+   * process will perpetually be in hibernation. If this method returns FALSE,
+   * the process will go into hibernation.
+   */
+  protected function needsProcessing() {
+    return FALSE;
+  }
+
+  /**
+   * Here's where each process occurs. If you are extending this class, you will
+   * likely want to implement this method. Here it's just calling a separate
+   * process function.
+   */
+  protected function process() {
+    if (isset($this->processCallback)) {
+      $callback = $this->processCallback;
+      if (function_exists($callback)) {
+        return $callback();
+      }
+      else {
+        drush_log('No callback exists for this daemon process.', 'error');
+        $this->stop();
+      }
+    }
+    return FALSE;
+  }
+
+  /**
+   * There is no processing currently needed, so go to sleep.
    */
   protected function hibernate() {
     $custom_callback = (isset($this->needsProcessingCallback) && function_exists($this->needsProcessingCallback)) ? $this->needsProcessingCallback : FALSE;
@@ -390,21 +498,22 @@ class DrushDaemon {
   }
 
   /**
-   * If you are extending this class, you NEED to implement this method, or the
-   * process will perpetually be in hibernation. If this method returns FALSE,
-   * the process will go into hibernation.
+   * Ends the current process.
    */
-  protected function needsProcessing() {
-    return FALSE;
-  }
-
   protected function endProcess() {
     $this->statusHandler->SetStatus(StatusHandler::STOPPED, FALSE);
     $this->statusHandler->logStatus('notice', 'The process has stopped.');
   }
 
 
+  /**
+   * Health Checks and Progress Messages
+   * ===================================
+   */
 
+  /**
+   * Iterates through all health check callbacks, ensuring they all return TRUE.
+   */
   protected function checkHealth() {
     foreach ($this->healthChecks as $function) {
       if ((method_exists($this, $function) && !$this->$function()) ||
@@ -417,6 +526,30 @@ class DrushDaemon {
     return TRUE;
   }
 
+  /**
+   * Health check to check memory usage. If memory exceeds the threshold, the
+   * process will refork.
+   */
+  protected function checkMemoryUsage() {
+    $memory_limit = DrushDaemon::getMemoryLimit();
+    $usage = memory_get_peak_usage();
+    $pct_memory = $usage/$memory_limit;
+    if ($pct_memory > DrushDaemon::MEMORY_THRESHOLD) {
+      $t_args = array(
+        '!pct' => round($pct_memory*100),
+        '!usage' => format_size($usage),
+        '!limit' => format_size($memory_limit),
+      );
+      drush_log(dt('Memory usage is !usage (!pct% of limit !limit), starting new batch', $t_args), 'warning');
+      $this->queueRefork();
+    }
+    // This is not a fatal error, so always return TRUE.
+    return TRUE;
+  }
+
+  /**
+   * Ensures the status still allows for continued processing.
+   */
   protected function checkStatus($process_result) {
     $healthy = $this->checkHealth();
     $status = $this->getStatus();
@@ -435,27 +568,10 @@ class DrushDaemon {
   }
 
   /**
-   * Here's the actual meat of the daemon, where each process occurs.
-   */
-  protected function process() {
-    if (isset($this->processCallback)) {
-      $callback = $this->processCallback;
-      if (function_exists($callback)) {
-        return $callback();
-      }
-      else {
-        drush_log('No callback exists for this daemon process.', 'error');
-        $this->stop();
-      }
-    }
-    return FALSE;
-  }
-
-  /**
    * Outputs a progress message, reflecting the current status of a migration process.
    *
    * @param int $result
-   *  Status of the process, represented by one of the MAGS_CUSTOM_RESULT_* constants.
+   *   Status of the process, represented by one of the DrushDaemon::RESULT_* constants.
    */
   protected function progressMessage($result) {
     // In the PROCESSING case, only proceed under the proper conditions
@@ -517,6 +633,12 @@ class DrushDaemon {
     }
   }
 
+
+  /**
+   * Helper functions and Misc. Getters
+   * ==================================
+   */
+
   /**
    * Retrieve the current status of the daemon process.
    */
@@ -536,10 +658,16 @@ class DrushDaemon {
     $this->statusHandler->setStatus($status, $log);
   }
 
+  /**
+   * Get the process ID.
+   */
   public function getPid() {
     return $this->statusHandler->getPid();
   }
 
+  /**
+   * Loads up the daemon options from hook_drush_command, setting them on the object.
+   */
   protected function customizeOptions() {
     if (isset($this->drushCommandArray['daemon']['options'])) {
       foreach ($this->drushCommandArray['daemon']['options'] as $name => $value) {
@@ -548,6 +676,9 @@ class DrushDaemon {
     }
   }
 
+  /**
+   * Detects the command that has been called, be it 'start', 'stop', 'restart', etc.
+   */
   protected function detectCommand() {
     $command = array_shift($this->drushCommandArray['arguments']);
     // Method will normally be one of 'start', 'stop', or 'restart'.
@@ -556,6 +687,9 @@ class DrushDaemon {
     }
   }
 
+  /**
+   * Detects Drush options, setting up instance variables where needed.
+   */
   protected function detectOptions() {
     if ($feedback = drush_get_option('feedback')) {
       $parts = explode(' ', $feedback);
@@ -569,6 +703,9 @@ class DrushDaemon {
     }
   }
 
+  /**
+   * Detects safe filepaths for Logging and Status files.
+   */
   protected function detectFilepaths() {
     $path_aliases = _core_path_aliases();
     $filepath = $path_aliases['%root'] .'/'. $path_aliases['%files'];
@@ -584,23 +721,9 @@ class DrushDaemon {
     }
   }
 
-  protected function checkMemoryUsage() {
-    $memory_limit = DrushDaemon::getMemoryLimit();
-    $usage = memory_get_peak_usage();
-    $pct_memory = $usage/$memory_limit;
-    if ($pct_memory > DrushDaemon::MEMORY_THRESHOLD) {
-      $t_args = array(
-        '!pct' => round($pct_memory*100),
-        '!usage' => format_size($usage),
-        '!limit' => format_size($memory_limit),
-      );
-      drush_log(dt('Memory usage is !usage (!pct% of limit !limit), starting new batch', $t_args), 'warning');
-      $this->queueRefork();
-    }
-    // This is not a fatal error, so always return TRUE.
-    return TRUE;
-  }
-
+  /**
+   * Gets the current PHP memory limit.
+   */
   static public function getMemoryLimit() {
     static $memory_limit;
 
@@ -626,6 +749,21 @@ class DrushDaemon {
     return $memory_limit;
   }
 
+  /**
+   * Determine if this command requires a fork (to be run in the background).
+   *
+   * @see drushd_drush_init().
+   *
+   * @return bool
+   *   TRUE if the command requires background processing.
+   */
+  public function commandRequiresFork() {
+    return in_array($this->command, $this->forkingCommands);
+  }
+
+  /**
+   * Exits out of Drush cleanly, preventing command callbacks from being called.
+   */
   public function drushExit() {
     drush_set_context('DRUSH_EXECUTION_COMPLETED', TRUE);
     exit($this->frontendReturn);
