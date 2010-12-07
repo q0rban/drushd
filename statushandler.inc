@@ -99,7 +99,7 @@ class StatusHandler {
     $this->statusTTL = $daemon->getStatusTTL();
     $this->statusFilename = $filename;
     $this->detectStatus();
-    if ($this->daemon->isDaemon()) {
+    if ($this->daemon->isDaemon() && function_exists('posix_getpid')) {
       $this->pid = posix_getpid();
     }
   }

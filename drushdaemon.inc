@@ -274,9 +274,11 @@ class DrushDaemon {
     }
   }
 
+  // @todo: This is currently unsafe, as it could lead to multiple commands
+  // running at the same time.
   /**
    * Resume the process. This is a forking command.
-   */
+   *
   protected function resume() {
     $this->_start();
   }
@@ -312,8 +314,20 @@ class DrushDaemon {
    * Stop the process.
    */
   protected function stop() {
-    if (drush_get_option('kill', FALSE) && $this->statusHandler->getPid()) {
-      $command = 'kill '. $this->statusHandler->getPid();
+    $log_type = 'error';
+    $status = $this->getStatus(TRUE);
+    if ($status == StatusHandler::STARTED || $status == StatusHandler::HIBERNATING || $status == StatusHandler::REFORKING) {
+      $log_type = $this->queueStatusChange($status, StatusHandler::STOPPING, StatusHandler::STOPPED);
+    }
+    $this->statusHandler->logStatus($log_type);
+  }
+
+  /**
+   * Kill the process immediately
+   */
+  protected function kill() {
+    if ($pid = $this->statusHandler->getPid()) {
+      $command = 'kill '. $pid;
       // @todo, this needs some debugging.
       if (drush_shell_exec($command)) {
         $this->setStatus(StatusHandler::STOPPED, FALSE);
@@ -324,12 +338,9 @@ class DrushDaemon {
       }
     }
     else {
-      $log_type = 'error';
-      $status = $this->getStatus(TRUE);
-      if ($status == StatusHandler::STARTED || $status == StatusHandler::HIBERNATING || $status == StatusHandler::REFORKING) {
-        $log_type = $this->queueStatusChange($status, StatusHandler::STOPPING, StatusHandler::STOPPED);
-      }
-      $this->statusHandler->logStatus($log_type);
+      $message = function_exists('posix_getpid') ? 'No process Id was found.'
+        : 'The PHP function posix_getpid() does not exist on this server.';
+      drush_log(dt($message), 'error');
     }
   }
 
