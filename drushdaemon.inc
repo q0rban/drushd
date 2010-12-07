@@ -426,7 +426,7 @@ class DrushDaemon {
    */
   protected function beginProcess() {
     $this->statusHandler->SetStatus(StatusHandler::STARTED, FALSE);
-    $this->statusHandler->logStatus('notice', 'The process has started.');
+    $this->statusHandler->logStatus('ok', 'The process has started.');
     $this->lastfeedback = microtime(TRUE);
 
     $this->total_processed = $this->total_successes =
@@ -513,7 +513,7 @@ class DrushDaemon {
    */
   protected function endProcess() {
     $this->statusHandler->SetStatus(StatusHandler::STOPPED, FALSE);
-    $this->statusHandler->logStatus('notice', 'The process has stopped.');
+    $this->statusHandler->logStatus('ok', 'The process has stopped.');
   }
 
 

@@ -143,17 +143,22 @@ class StatusHandler {
    *   Whether to log this status change.
    */
   public function setStatus($status, $log = TRUE) {
-    $this->status = $status;
-    // If we're reforking, store the reforked command.
-    if ($status == StatusHandler::REFORKING) {
-      $this->reforkedCommand = $this->daemon->getCommand();
-      // Store the timestamp of this refork.
-      $this->reforks[$this->reforkedCommand][] = time();
+    if ($this->status != $status) {
+      $this->status = $status;
+      // If we're reforking, store the reforked command.
+      if ($status == StatusHandler::REFORKING) {
+        $this->reforkedCommand = $this->daemon->getCommand();
+        // Store the timestamp of this refork.
+        $this->reforks[$this->reforkedCommand][] = time();
+      }
+      // Write the file, without re-reading from disk first.
+      $this->writeStatusFile(FALSE);
+      if ($log) {
+        $this->logStatus('ok', "The @drush-cmd process' status has changed to '@status'.");
+      }
     }
-    // Write the file, without re-reading from disk first.
-    $this->writeStatusFile(FALSE);
-    if ($log) {
-      $this->logStatus();
+    else {
+      drush_log(dt('The status is already @status', array('@status' => $status)), 'warning');
     }
   }
 
