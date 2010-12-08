@@ -39,7 +39,12 @@ class NodeAccessRebuildDaemon extends ProcessItemsDaemon {
    * Check to see if node access grants need to be rebuilt.
    */
   protected function needsProcessing() {
-    $needs_processing = count(module_implements('node_grants')) && node_access_needs_rebuild();
+    // If we're hibernating, we need to use backend invoke to get the
+    // node_access_needs_rebuild status, so as to get a fresh value from the
+    // database. Otherwise, we'd just be retrieving what exists in the static
+    // cache, which wouldn't do us much good. :)
+    $needs_rebuild = $this->getStatus() == StatusHandler::HIBERNATING ? _drushd_example_node_access_needs_rebuild() : node_access_needs_rebuild();
+    $needs_processing = count(module_implements('node_grants')) && $needs_rebuild;
 
     if ($needs_processing) {
       // If we don't have any queued nodes, fill up the processItems array.

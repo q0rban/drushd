@@ -80,11 +80,51 @@ function drushd_example_drush_command() {
     'command-hook' => 'drushd',
   );
 
+  // This is a helper command to get a fresh node_access_needs_rebuild().
+  // Since node_access_needs_rebuild is a variable, it gets statically cached,
+  // but putting it in a drush command allows the daemon to retrieve a fresh
+  // return value from the command, without having to refork each time.
+  $items['node-access-needs-rebuild'] = array(
+    'hidden' => TRUE,
+    'description' => 'Return or set whether node access grants need to be rebuilt.',
+    'arguments' => array(
+      'value' => 'Optional value to set node access needs rebuild to, either 0 or 1.'
+    )
+  );
+
   return $items;
 }
 
-function drushd_example_simple_needs_processing() {
-  return TRUE;
+/**
+ * Callback for drush node-access-needs-rebuild.
+ */
+function drush_drushd_example_node_access_needs_rebuild() {
+  // If we are in the backend context, print the status directly.
+  if (drush_get_context('DRUSH_BACKEND')) {
+    drush_print((string) node_access_needs_rebuild());
+    return;
+  }
+
+  if (($args = drush_get_arguments()) && count($args) > 1) {
+    node_access_needs_rebuild((bool) $args[1]);
+    drush_log(dt('Node access needs rebuild has been set to !val', array('!val' => $args[1])));
+  }
+  $message = 'Node access grants do not need to be rebuilt.';
+  if (_drushd_example_node_access_needs_rebuild() == 1) {
+    $message = 'Node access grants need to be rebuilt.';
+  }
+  drush_log(dt($message), 'ok');
+}
+
+/**
+ * Retrieve the current bot status, clearing the variable cache first.
+ */
+function _drushd_example_node_access_needs_rebuild() {
+  // We first clear the variables cache and then invoke the command to get a
+  // fresh status. Otherwise the static variable may contain stale data.
+  cache_clear_all('variables', 'cache');
+  $ret = drush_backend_invoke('node-access-needs-rebuild', array(), 'GET', FALSE);
+  return $ret['output'];
 }
 
 /**
@@ -103,6 +143,10 @@ function drushd_example_simple_process() {
   $daemon->processed_since_feedback++;
 
   // Only return FALSE if something happens that should stop all the processes.
+  return TRUE;
+}
+
+function drushd_example_simple_needs_processing() {
   return TRUE;
 }
 

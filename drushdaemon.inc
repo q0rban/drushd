@@ -328,6 +328,10 @@ class DrushDaemon {
    */
   protected function startHasForked() {
     $log_type = $this->queueStatusChange(StatusHandler::STOPPED, StatusHandler::STOPPED, StatusHandler::STARTED);
+    // Hibernating is an ok status also.
+    if ($this->getStatus() == StatusHandler::HIBERNATING) {
+      $log_type = 'success';
+    }
     $this->statusHandler->logStatus($log_type);
   }
   
@@ -361,7 +365,7 @@ class DrushDaemon {
       drush_log(dt('The process Id for this process is !pid', array('!pid' => $pid)), 'ok');
     }
     if ($this->getStatus() == StatusHandler::HIBERNATING) {
-      drush_log(dt('Last hibernation cycle was at @date', array('@date' => date("M d Y H:i:s", $this->statusHandler->getLastWritten()))), 'ok');
+      drush_log(dt('Last hibernation cycle was at @date.', array('@date' => date("H:i:s", $this->statusHandler->getLastWritten()))), 'ok');
     }
     if (isset($this->statusHandler->memoryPeakUsage)) {
       $dt_args = array(
