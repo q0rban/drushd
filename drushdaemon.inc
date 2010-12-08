@@ -322,7 +322,20 @@ class DrushDaemon {
    */
   protected function showLog() {
     if (isset($this->logFilename) && file_exists($this->logFilename)) {
-      $command = "less +G {$this->logFilename}";
+      $lines = drush_get_option('lines', 0);
+      if (drush_get_option('watch')) {
+        $command  = 'watch tail';
+        $command .= $lines ? " -n $lines " : ' ';
+        $command .= $this->logFilename;
+      }
+      else if (drush_get_option('tail')) {
+        $command  = 'tail';
+        $command .= $lines ? " -n $lines " : ' ';
+        $command .= $this->logFilename;
+      }
+      else {
+        $command = "less +G {$this->logFilename}";
+      }
       drush_log(dt('Executing !command', array('!command' => $command)));
       proc_close(proc_open($command, array(0 => STDIN, 1 => STDOUT, 2 => STDERR), $pipes));
     }

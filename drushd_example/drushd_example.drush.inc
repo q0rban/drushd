@@ -1,5 +1,16 @@
 <?php
 
+/**
+ * Implementation of hook_drush_help().
+ */
+function drushd_example_drush_help($section) {
+  switch ($section) {
+    case 'drush:node-access-rebuild':
+      return dt('Daemon to rebuild node access permissions.');
+    case 'drush:drushd-example-simple':
+      return dt('');
+  }
+}
 
 /**
  * Implementation of hook_drush_command().
@@ -22,15 +33,39 @@ function drushd_example_drush_command() {
     'command-hook' => 'drushd',
 
     // Everything below here is just typical drush command parameters.
-    'description' => "Daemon to rebuild node access permissions.",
+    'description' => 'Daemon to rebuild node access permissions.',
     'drupal dependencies' => array('node'),
     'aliases' => array('nar'),
     'options' => array(
       '--feedback' => 'Frequency of progress messages, in seconds or items processed.',
     ),
+    // Good to include these arguments, so people know how to use the daemon.
+    'arguments' => array(
+      'start'    => 'Start the daemon.',
+      'status'   => 'Display status information about the daemon.',
+      'stop'     => 'Stop the daemon.',
+      'restart'  => 'Restart the daemon',
+      'show-log' => 'Show the log file.',
+    ),
     'examples' => array(
-      'nar start --feedback="100 items"' => 'Rebuild node access permissions, logging a status message every 100 nodes.',
-      'nar start --feedback="60 seconds"' => 'Rebuild node access permissions, logging a status message every 60 seconds.',
+      'drush nar start'                         => 'Start the daemon.',
+      'drush nar start --feedback="100 items"'  => 'Log a status message every 100 nodes.',
+      'drush nar start --feedback="60 seconds"' => 'Log a status message every 60 seconds.',
+      'drush nar start --verbose'               => 'Log verbosely.',
+      ' '   => '',
+      'drush nar status' => 'Show the current status of the daemon.',
+      '  '  => '',
+      'drush nar stop'              => 'Stop the daemon, allowing 45 seconds for processing.',
+      'drush nar stop --timeout=10' => 'Allow 10 seconds for processing.',
+      'drush nar stop --queue'      => 'Queue the node access rebuild daemon to stop.',
+      '   ' => '',
+      'drush nar restart'              => 'Restart the daemon, allowing 45 seconds for processing.',
+      'drush nar restart --timeout=10' => 'Allow 10 seconds for processing.',
+      'drush nar restart --queue'      => 'Queue the node access rebuild daemon to restart.',
+      '    ' => '',
+      'drush nar show-log' => 'Show the log file, using less.',
+      'drush nar show-log --watch' => 'Watch the log file.',
+      'drush nar show-log --tail' => 'Show just the tail of the log file, to see recent messages.',
     ),
   );
 
