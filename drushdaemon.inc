@@ -236,13 +236,21 @@ class DrushDaemon {
       $last = array_pop($reforks);
       $duration = ($last - $first) / 60;
 
-      // If we've exceeded at our refork limit, and it's less than a minute, throw
-      // an error and stop the process.
-      if ($count >= $this->reforkLimitPerMin && $duration < 1) {
-        drush_log(dt('The refork limit has been exceeded for this process. Please check the memory requirements and available memory and try again.'), 'error');
-        $this->setStatus(StatusHandler::STOPPED);
-        $this->frontendReturn = 1;
-        return;
+      if ($count >= $this->reforkLimitPerMin) {
+        // If we've exceeded at our refork limit, and it's less than a minute,
+        // throw an error and stop the process.
+        if ($duration < 1) {
+          drush_log(dt('The refork limit has been exceeded for this process. Please check the memory requirements and available memory and try again.'), 'error');
+          $this->setStatus(StatusHandler::STOPPED);
+          $this->frontendReturn = 1;
+          return;
+        }
+        else {
+          // No need to store more reforks than our limit.
+          $keepers = array_slice($this->statusHandler->reforks[$this->command], - $this->reforkLimitPerMin);
+          $this->statusHandler->reforks[$this->command] = $keepers;
+          $this->statusHandler->writeStatusFile();
+        }
       }
     }
     $this->fork();
