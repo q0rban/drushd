@@ -22,7 +22,7 @@ class ProcessItemsDaemon extends DrushDaemon {
   protected function status() {
     parent::status();
     if ($count = count($this->getAllItems())) {
-      drush_log(dt('The are !num process items remaining.', array('!num' => $count)), 'ok');
+      drush_log(dt('There are !num process items remaining.', array('!num' => $count)), 'ok');
     }
   }
 

@@ -61,7 +61,7 @@ class DrushDaemon {
    *
    * @var array
    */
-  protected $forkingCommands = array('start', 'resume');
+  protected $forkingCommands = array('start');
 
   /**
    * The front end exit return value. Zero is success.
@@ -175,8 +175,10 @@ class DrushDaemon {
    * Summon a daemon for this command, by forking.
    */
   public function summon() {
-    $this->fork();
-    drush_log(dt('The @drush-cmd daemon has started.', array('@drush-cmd' => $this->drushCommand)), 'success');
+    if ($this->canFork()) {
+      $this->fork();
+      $this->hasForked();
+    }
   }
 
   /**
@@ -221,6 +223,27 @@ class DrushDaemon {
     $cmd = implode(' ', $args);
     $options = drush_get_context('options');
     drush_backend_fork($cmd, $options);
+  }
+
+  /**
+   * Determine if this command can currently fork.
+   */
+  protected function canFork() {
+    $method = $this->command .'CanFork';
+    if (method_exists($this, $method)) {
+      return $this->$method();
+    }
+    return TRUE;
+  }
+
+  /**
+   * Forking has completed. Check to see if the command wants to do anything.
+   */
+  protected function hasForked() {
+    $method = $this->command .'HasForked';
+    if (method_exists($this, $method)) {
+      $this->$method();
+    }
   }
 
   /**
@@ -289,6 +312,26 @@ class DrushDaemon {
     }
   }
 
+  /**
+   * Check to make sure the process can be started as a fork.
+   */
+  protected function startCanFork() {
+    if ($this->getStatus() == StatusHandler::STOPPED) {
+      return TRUE;
+    }
+    $this->statusHandler->logStatus('error');
+    return FALSE;
+  }
+
+  /**
+   * Starting has forked, provide frontend details about the success thereof.
+   */
+  protected function startHasForked() {
+    $log_type = $this->queueStatusChange(StatusHandler::STOPPED, StatusHandler::STOPPED, StatusHandler::STARTED);
+    $this->statusHandler->logStatus($log_type);
+  }
+  
+
   // @todo: This is currently unsafe, as it could lead to multiple commands
   // running at the same time.
   /**
@@ -315,10 +358,17 @@ class DrushDaemon {
   protected function status() {
     $this->statusHandler->logStatus('success');
     if ($pid = $this->statusHandler->getPid()) {
-      drush_log(dt('The process Id for this process is !pid', array('!pid' => $pid)));
+      drush_log(dt('The process Id for this process is !pid', array('!pid' => $pid)), 'ok');
     }
     if ($this->getStatus() == StatusHandler::HIBERNATING) {
       drush_log(dt('Last hibernation cycle was at @date', array('@date' => date("M d Y H:i:s", $this->statusHandler->getLastWritten()))), 'ok');
+    }
+    if (isset($this->statusHandler->memoryPeakUsage)) {
+      $dt_args = array(
+        '!peak' => $this->statusHandler->memoryPeakUsage,
+        '!limit' => format_size($this->getMemoryLimit())
+      );
+      drush_log(dt('The last recorded peak memory usage was !peak of limit !limit', $dt_args), 'ok');
     }
     if (drush_get_context('DRUSH_VERBOSE')) {
       drush_print($this->statusHandler);
@@ -370,10 +420,10 @@ class DrushDaemon {
   protected function kill() {
     if ($pid = $this->statusHandler->getPid()) {
       $command = 'kill '. $pid;
-      // @todo, this needs some debugging.
+
       if (drush_shell_exec($command)) {
         $this->setStatus(StatusHandler::STOPPED, FALSE);
-        $this->logStatus('success');
+        $this->statusHandler->logStatus('success');
       }
       else {
         drush_log('Failed to kill the process', 'error');
@@ -436,11 +486,16 @@ class DrushDaemon {
       drush_log(dt('The specified timeout is shorter than the status TTL of !num seconds.', array('!num' => $this->statusTTL)), 'warning');
     }
 
+    if ($current_status != $transition_status) {
+      $this->setStatus($transition_status);
+      // Give it a sec to save the file. :)
+      sleep(1);
+    }
+
     $start = $time = time();
 
-    $this->setStatus($transition_status);
     if (!$queue) {
-      drush_log(dt('The status TTL is !num seconds, so expect a wait.', array('!num' => $this->statusTTL)), 'ok');
+      drush_log(dt('The status TTL is !num seconds.', array('!num' => $this->statusTTL)));
       while ($this->getStatus(TRUE) == $transition_status && $time - $start < $timeout) {
         $this->statusHandler->logStatus();
         // Sleep for 5 seconds.
@@ -606,14 +661,15 @@ class DrushDaemon {
   protected function checkMemoryUsage() {
     $memory_limit = DrushDaemon::getMemoryLimit();
     $usage = memory_get_peak_usage();
+    $this->statusHandler->memoryPeakUsage = format_size($usage);
     $pct_memory = $usage/$memory_limit;
     if ($pct_memory > DrushDaemon::MEMORY_THRESHOLD) {
       $t_args = array(
         '!pct' => round($pct_memory*100),
-        '!usage' => format_size($usage),
+        '!usage' => $this->statusHandler->memoryPeakUsage,
         '!limit' => format_size($memory_limit),
       );
-      drush_log(dt('Memory usage is !usage (!pct% of limit !limit), starting new batch', $t_args), 'warning');
+      drush_log(dt('Memory usage is !usage (!pct% of limit !limit), reforking.', $t_args), 'warning');
       $this->queueRefork();
     }
     // This is not a fatal error, so always return TRUE.

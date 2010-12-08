@@ -28,6 +28,13 @@ class StatusHandler {
   public function getLastWritten() { return $this->lastWritten; }
 
   /**
+   * A formatted string of the current peak memory usage.
+   *
+   * @var string
+   */
+  public $memoryPeakUsage;
+
+  /**
    * The process ID.
    *
    * @var int
