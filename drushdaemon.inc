@@ -323,6 +323,7 @@ class DrushDaemon {
   protected function showLog() {
     if (isset($this->logFilename) && file_exists($this->logFilename)) {
       $command = "less {$this->logFilename}";
+      drush_log(dt('Executing !command', array('!command' => $command)));
       proc_close(proc_open($command, array(0 => STDIN, 1 => STDOUT, 2 => STDERR), $pipes));
     }
     else {
