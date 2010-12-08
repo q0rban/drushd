@@ -40,7 +40,7 @@ class StatusHandler {
    *
    * @var array
    */
-  public $processItems = array();
+  public $processItems;
 
   /**
    * The command that was reforked.
@@ -154,7 +154,7 @@ class StatusHandler {
       // Write the file, without re-reading from disk first.
       $this->writeStatusFile(FALSE);
       if ($log) {
-        $this->logStatus('ok', "The @drush-cmd process' status has changed to '@status'.");
+        $this->logStatus('ok', "The @drush-cmd process state has changed to `@status`.");
       }
     }
     else {

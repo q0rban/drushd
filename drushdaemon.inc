@@ -169,7 +169,7 @@ class DrushDaemon {
    */
   public function summon() {
     $this->fork();
-    drush_log('The daemon has started', 'success');
+    drush_log(dt('The @drush-cmd daemon has started.', array('@drush-cmd' => $this->drushCommand)), 'success');
   }
 
   /**
@@ -426,7 +426,7 @@ class DrushDaemon {
    */
   protected function beginProcess() {
     $this->statusHandler->SetStatus(StatusHandler::STARTED, FALSE);
-    $this->statusHandler->logStatus('ok', 'The process has started.');
+    $this->statusHandler->logStatus('ok', 'The @drush-cmd process has started.');
     $this->lastfeedback = microtime(TRUE);
 
     $this->total_processed = $this->total_successes =
@@ -494,7 +494,7 @@ class DrushDaemon {
     // Update the status if need be.
     if ($status != $this->getStatus()) {
       if ($status == StatusHandler::STARTED) {
-        // If we're coming out of hibernation, reset the feedback the timer.
+        // If we're coming out of hibernation, reset the feedback timer.
         $this->lastfeedback = microtime(TRUE);
       }
       $this->setStatus($status);
@@ -521,6 +521,26 @@ class DrushDaemon {
    * Health Checks and Progress Messages
    * ===================================
    */
+
+  /**
+   * Ensures the status still allows for continued processing.
+   */
+  protected function checkStatus($process_result) {
+    $healthy = $this->checkHealth();
+    $status = $this->getStatus();
+    if (!$healthy || !$process_result || $status == StatusHandler::STOPPING) {
+      return DrushDaemon::RESULT_STOPPED;
+    }
+    if ($status == StatusHandler::REFORKING) {
+      return DrushDaemon::RESULT_INCOMPLETE;
+    }
+    if ($status == StatusHandler::HIBERNATING) {
+      return DrushDaemon::RESULT_HIBERNATING;
+    }
+    $result = DrushDaemon::RESULT_PROCESSING;
+    $this->progressMessage($result);
+    return $result;
+  }
 
   /**
    * Iterates through all health check callbacks, ensuring they all return TRUE.
@@ -556,26 +576,6 @@ class DrushDaemon {
     }
     // This is not a fatal error, so always return TRUE.
     return TRUE;
-  }
-
-  /**
-   * Ensures the status still allows for continued processing.
-   */
-  protected function checkStatus($process_result) {
-    $healthy = $this->checkHealth();
-    $status = $this->getStatus();
-    if (!$healthy || !$process_result || $status == StatusHandler::STOPPING) {
-      return DrushDaemon::RESULT_STOPPED;
-    }
-    if ($status == StatusHandler::REFORKING) {
-      return DrushDaemon::RESULT_INCOMPLETE;
-    }
-    if ($status == StatusHandler::HIBERNATING) {
-      return DrushDaemon::RESULT_HIBERNATING;
-    }
-    $result = DrushDaemon::RESULT_PROCESSING;
-    $this->progressMessage($result);
-    return $result;
   }
 
   /**
@@ -626,12 +626,16 @@ class DrushDaemon {
         $message .= " - stopped";
         $type = 'warning';
         break;
+      case DrushDaemon::RESULT_HIBERNATING:
+        $message .= " - completed";
+        $type = 'success';
+        break;
     }
 
     $dt_args = array(
       '!numitems' => $this->processed_since_feedback,
       '!successes' => $this->successes_since_feedback,
-      '!failed' => $failed > 0 ? t(' (!failed failed)', array('!failed' => $failed)) : '',
+      '!failed' => $failed > 0 ? dt(' (!failed failed)', array('!failed' => $failed)) : '',
       '!time' => $time,
       '!perminute' => $perminute,
     );

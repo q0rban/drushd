@@ -56,7 +56,7 @@ class NodeAccessRebuildDaemon extends ProcessItemsDaemon {
         }
         // If we don't have any nids, no reason to process.
         else {
-          $this->processItemsEmpty();
+          node_access_needs_rebuild(FALSE);
           $needs_processing = FALSE;
         }
       }
@@ -70,7 +70,8 @@ class NodeAccessRebuildDaemon extends ProcessItemsDaemon {
    * There are no nodes left to rebuild, so tell node access.
    */
   protected function processItemsEmpty() {
-    drush_backend_invoke('cache-clear all');
+    progressMessage(StatusHandler::RESULT_HIBERNATING);
     node_access_needs_rebuild(FALSE);
+    drush_backend_invoke('cache-clear all');
   }
 }
