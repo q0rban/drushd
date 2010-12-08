@@ -70,7 +70,7 @@ class NodeAccessRebuildDaemon extends ProcessItemsDaemon {
    * There are no nodes left to rebuild, so tell node access.
    */
   protected function processItemsEmpty() {
-    progressMessage(StatusHandler::RESULT_HIBERNATING);
+    $this->progressMessage(StatusHandler::RESULT_HIBERNATING);
     node_access_needs_rebuild(FALSE);
     drush_backend_invoke('cache-clear all');
   }
