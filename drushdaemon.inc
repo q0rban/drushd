@@ -85,6 +85,13 @@ class DrushDaemon {
   protected $hibernateDuration = 900;
 
   /**
+   * The file name and path of the log file.
+   *
+   * @var string
+   */
+  protected $logFilename;
+
+  /**
    * The name of the callback function called to determing if there are items to
    * process.
    *
@@ -307,6 +314,19 @@ class DrushDaemon {
     }
     if (drush_get_context('DRUSH_VERBOSE')) {
       drush_print($this->statusHandler);
+    }
+  }
+
+  /**
+   * Shows the log file, using less.
+   */
+  protected function showLog() {
+    if (isset($this->logFilename) && file_exists($this->logFilename)) {
+      $command = "less {$this->logFilename}";
+      proc_close(proc_open($command, array(0 => STDIN, 1 => STDOUT, 2 => STDERR), $pipes));
+    }
+    else {
+      drush_log(dt('No log file exists for this process.'), 'error');
     }
   }
 
@@ -695,7 +715,9 @@ class DrushDaemon {
    * Detects the command that has been called, be it 'start', 'stop', 'restart', etc.
    */
   protected function detectCommand() {
-    $command = array_shift($this->drushCommandArray['arguments']);
+    $first_argument = array_shift($this->drushCommandArray['arguments']);
+    // Strip all hyphens, for instance show-log calls $DrushDaemon::showLog().
+    $command = str_replace('-', '', $first_argument);
     // Method will normally be one of 'start', 'stop', or 'restart'.
     if (method_exists($this, $command)) {
       $this->command = $command;
