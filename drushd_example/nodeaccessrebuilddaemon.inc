@@ -43,8 +43,13 @@ class NodeAccessRebuildDaemon extends ProcessItemsDaemon {
     // node_access_needs_rebuild status, so as to get a fresh value from the
     // database. Otherwise, we'd just be retrieving what exists in the static
     // cache, which wouldn't do us much good. :)
-    $needs_rebuild = $this->getStatus() == StatusHandler::HIBERNATING ? _drushd_example_node_access_needs_rebuild() : node_access_needs_rebuild();
-    $needs_processing = count(module_implements('node_grants')) && $needs_rebuild;
+    if ($this->getStatus() == StatusHandler::HIBERNATING) {
+      $needs_rebuild = _drushd_example_node_access_needs_rebuild() == 1;
+      // Now store the fresh copy in node_access_needs_rebuild, for performance.
+      node_access_needs_rebuild($needs_rebuild);
+    }
+
+    $needs_processing = count(module_implements('node_grants')) && node_access_needs_rebuild();
 
     if ($needs_processing) {
       // If we don't have any queued nodes, fill up the processItems array.
@@ -66,6 +71,10 @@ class NodeAccessRebuildDaemon extends ProcessItemsDaemon {
         }
       }
       drush_log(dt('There are !num nodes to rebuild.', array('!num' => $count)));
+    }
+    // Clean out the items if we don't need processing.
+    else {
+      $this->setItems();
     }
 
     return $needs_processing;
