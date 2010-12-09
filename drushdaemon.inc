@@ -537,11 +537,6 @@ class DrushDaemon {
     $result = DrushDaemon::RESULT_PROCESSING;
     $process_result = TRUE;
     while ($result == DrushDaemon::RESULT_PROCESSING || $result == DrushDaemon::RESULT_HIBERNATING) {
-      // This will write any errors, etc. to the log.
-      if ($this->isDaemon()) {
-        ob_flush();
-      }
-
       // Only process if we're not hibernating.
       if (!$this->hibernate()) {
         $process_result = $this->process();
@@ -596,6 +591,12 @@ class DrushDaemon {
         $this->lastfeedback = microtime(TRUE);
       }
       $this->setStatus($status);
+    }
+
+    // Very important. This will write any errors, etc. to the log. We do this
+    // just before hibernation, so that everything gets logged properly.
+    if ($this->isDaemon()) {
+      ob_flush();
     }
 
     if ($hibernate) {
