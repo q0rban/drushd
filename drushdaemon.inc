@@ -594,7 +594,7 @@ class DrushDaemon {
     $status = $needs_processing ? StatusHandler::STARTED : StatusHandler::HIBERNATING;
     $current_status = $this->getStatus();
     // Update the status if need be, but don't do it if we're stopping.
-    if ($status != $current_status && $current_status != StatusHandler::STOPPING) {
+    if ($status != $current_status && ($current_status == StatusHandler::HIBERNATING || $current_status == StatusHandler::STARTED)) {
       if ($status == StatusHandler::STARTED) {
         // If we're coming out of hibernation, reset the feedback timer.
         $this->lastfeedback = microtime(TRUE);
