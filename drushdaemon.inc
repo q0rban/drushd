@@ -276,7 +276,9 @@ class DrushDaemon {
    * Queue this process to refork.
    */
   public function queueRefork() {
-    $this->setStatus(StatusHandler::REFORKING);
+    if ($this->getStatus() != StatusHandler::REFORKING) {
+      $this->setStatus(StatusHandler::REFORKING);
+    }
   }
 
   /**
