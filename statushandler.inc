@@ -20,6 +20,14 @@ class StatusHandler {
   protected $daemon;
 
   /**
+   * The currently daemonized command.
+   *
+   * @var string
+   */
+  public $daemonCommand;
+  public function getDaemonCommand() { return $this->daemonCommand; }
+
+  /**
    * The timestamp of when the status was last written to file.
    *
    * @var int
@@ -48,14 +56,6 @@ class StatusHandler {
    * @var array
    */
   public $processItems;
-
-  /**
-   * The command that was reforked.
-   *
-   * @var string
-   */
-  public $reforkedCommand;
-  public function getReforkedCommand() { return $this->reforkedCommand; }
 
   /**
    * An array of timestamps of when a command was reforked, keyed by command.
@@ -106,8 +106,11 @@ class StatusHandler {
     $this->statusTTL = $daemon->getStatusTTL();
     $this->statusFilename = $filename;
     $this->detectStatus();
-    if ($this->daemon->isDaemon() && function_exists('posix_getpid')) {
-      $this->pid = posix_getpid();
+    if ($this->daemon->isDaemon()) {
+      $this->daemonCommand = $this->daemon->getCommand();
+      if (function_exists('posix_getpid')) {
+        $this->pid = posix_getpid();
+      }
     }
   }
 
@@ -153,10 +156,9 @@ class StatusHandler {
     if ($this->status != $status) {
       $this->status = $status;
       // If we're reforking, store the reforked command.
-      if ($status == StatusHandler::REFORKING) {
-        $this->reforkedCommand = $this->daemon->getCommand();
+      if ($status == StatusHandler::REFORKING && isset($this->daemonCommand)) {
         // Store the timestamp of this refork.
-        $this->reforks[$this->reforkedCommand][] = time();
+        $this->reforks[$this->daemonCommand][] = time();
       }
       // Write the file, without re-reading from disk first.
       $this->writeStatusFile(FALSE);
@@ -202,7 +204,7 @@ class StatusHandler {
     if (file_exists($this->statusFilename) && $json = file_get_contents($this->statusFilename)) {
       $this->statusLastRead = time();
 
-      foreach (json_decode($json, TRUE) as $key => $value) {
+      foreach ((array) json_decode($json, TRUE) as $key => $value) {
         // The initial read will set up all these values, but we don't want to
         // overwrite the variables with the ones on disk after the initial load,
         // unless it's the status variable, of course. :)

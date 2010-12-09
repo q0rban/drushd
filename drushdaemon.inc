@@ -120,13 +120,6 @@ class DrushDaemon {
   protected $reforkLimitPerMin = 10;
 
   /**
-   * Queue this process for reforking.
-   *
-   * @var bool
-   */
-  protected $refork = FALSE;
-
-  /**
    * The file name and path of the status file.
    *
    * @var string
@@ -209,7 +202,7 @@ class DrushDaemon {
     $command = $this->command;
     $output = $this->$command();
     // If reforking is required, do it!
-    if ($this->refork) {
+    if ($this->isReforking()) {
       $this->refork();
     }
     return $output;
@@ -283,7 +276,6 @@ class DrushDaemon {
    * Queue this process to refork.
    */
   public function queueRefork() {
-    $this->refork = TRUE;
     $this->setStatus(StatusHandler::REFORKING);
   }
 
@@ -291,7 +283,7 @@ class DrushDaemon {
    * Check to see if this process is currently reforking.
    */
   public function isReforking() {
-    return ($this->getStatus() == StatusHandler::REFORKING) && ($this->statusHandler->getReforkedCommand() == $this->getCommand());
+    return ($this->getStatus() == StatusHandler::REFORKING) && ($this->statusHandler->getDaemonCommand() == $this->getCommand());
   }
 
 
@@ -446,6 +438,10 @@ class DrushDaemon {
   protected function restart() {
     $log_type = 'error';
     $status = $this->getStatus(TRUE);
+    if (!$this->statusHandler->getDaemonCommand()) {
+      drush_log(dt('There is no daemon currently running for this process.'), 'error');
+      return;
+    }
     if ($status == StatusHandler::STARTED || $status == StatusHandler::HIBERNATING) {
       $log_type = $this->queueStatusChange($status, StatusHandler::REFORKING, StatusHandler::STARTED);
     }
@@ -634,6 +630,7 @@ class DrushDaemon {
       return DrushDaemon::RESULT_STOPPED;
     }
     if ($status == StatusHandler::REFORKING) {
+      $this->queueRefork();
       return DrushDaemon::RESULT_INCOMPLETE;
     }
     if ($status == StatusHandler::HIBERNATING) {
