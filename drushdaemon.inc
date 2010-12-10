@@ -252,11 +252,14 @@ class DrushDaemon {
       $last = array_pop($reforks);
       $duration = ($last - $first) / 60;
 
-      if ($count >= $this->reforkLimitPerMin) {
+      // If the last refork was lass than a minute ago, and the count is greater than
+      // our limit, check the duration between reforks.
+      if ((time() - $last < 60) && $count >= $this->reforkLimitPerMin) {
         // If we've exceeded at our refork limit, and it's less than a minute,
         // throw an error and stop the process.
         if ($duration < 1) {
           drush_log(dt('The refork limit has been exceeded for this process. Please check the memory requirements and available memory and try again.'), 'error');
+          $this->statusHandler->reforks = NULL;
           $this->setStatus(StatusHandler::STOPPED);
           $this->frontendReturn = 1;
           return;
@@ -321,11 +324,7 @@ class DrushDaemon {
    * Starting has forked, provide frontend details about the success thereof.
    */
   protected function startHasForked() {
-    $log_type = $this->queueStatusChange(StatusHandler::STOPPED, StatusHandler::STOPPED, StatusHandler::STARTED);
-    // Hibernating is an ok status also.
-    if ($this->getStatus() == StatusHandler::HIBERNATING) {
-      $log_type = 'success';
-    }
+    $log_type = $this->queueStatusChange(StatusHandler::STOPPED, StatusHandler::STOPPED, array(StatusHandler::PROCESSING, StatusHandler::HIBERNATING));
     $this->statusHandler->logStatus($log_type);
   }
   
@@ -406,8 +405,8 @@ class DrushDaemon {
   protected function stop() {
     $log_type = 'error';
     $status = $this->getStatus(TRUE);
-    if ($status == StatusHandler::STARTED || $status == StatusHandler::HIBERNATING || $status == StatusHandler::REFORKING) {
-      $log_type = $this->queueStatusChange($status, StatusHandler::STOPPING, StatusHandler::STOPPED);
+    if ($status == StatusHandler::PROCESSING || $status == StatusHandler::HIBERNATING || $status == StatusHandler::REFORKING) {
+      $log_type = $this->queueStatusChange($status, StatusHandler::STOPPING, array(StatusHandler::STOPPED));
     }
     $this->statusHandler->logStatus($log_type);
   }
@@ -444,8 +443,11 @@ class DrushDaemon {
       drush_log(dt('There is no daemon currently running for this process.'), 'error');
       return;
     }
-    if ($status == StatusHandler::STARTED || $status == StatusHandler::HIBERNATING) {
-      $log_type = $this->queueStatusChange($status, StatusHandler::REFORKING, StatusHandler::STARTED);
+
+    $happy_states = array(StatusHandler::PROCESSING, StatusHandler::HIBERNATING);
+
+    if (in_array($status, $happy_states)) {
+      $log_type = $this->queueStatusChange($status, StatusHandler::REFORKING, $happy_states);
     }
     $this->statusHandler->logStatus($log_type);
   }
@@ -459,12 +461,12 @@ class DrushDaemon {
    *   The StatusHandler status recorded before the method was called.
    * @param string $transition_status
    *   The status that queues the change, e.g. STOPPING, REFORKING
-   * @param string $desired_status
-   *   The desired status to achieve, for instance STOPPED, or STARTED.
+   * @param array $success_states
+   *   An array of possible desired states to achieve, e.g. STOPPED, or PROCESSING.
    * @return string
    *   The drush log type, 'success' or 'error'.
    */
-  protected function queueStatusChange($current_status, $transition_status, $desired_status) {
+  protected function queueStatusChange($current_status, $transition_status, $success_states) {
     $queue = drush_get_option('queue', FALSE);
     $timeout = drush_get_option('timeout', 45);
     if ($current_status == StatusHandler::HIBERNATING && !$queue) {
@@ -511,7 +513,7 @@ class DrushDaemon {
 
     // Get a fresh status. If we're just queuing to stop, we can't assume that
     // we get an error.
-    return $queue || $this->getStatus(TRUE) == $desired_status ? 'success' : 'error';
+    return $queue || in_array($this->getStatus(TRUE), $success_states) ? 'success' : 'error';
   }
 
 
@@ -524,8 +526,8 @@ class DrushDaemon {
    * Sets up the process for starting.
    */
   protected function beginProcess() {
-    $this->statusHandler->SetStatus(StatusHandler::STARTED, FALSE);
-    $this->statusHandler->logStatus('ok', 'The @drush-cmd process has started.');
+    $this->statusHandler->SetStatus(StatusHandler::PROCESSING, FALSE);
+    $this->statusHandler->logStatus('ok', 'The @drush-cmd process has begun processing.');
     $this->lastfeedback = microtime(TRUE);
 
     $this->total_processed = $this->total_successes =
@@ -584,11 +586,11 @@ class DrushDaemon {
     $needs_processing = $custom_callback ? $custom_callback() : $this->needsProcessing();
     $hibernate = !$needs_processing;
 
-    $status = $needs_processing ? StatusHandler::STARTED : StatusHandler::HIBERNATING;
+    $status = $needs_processing ? StatusHandler::PROCESSING : StatusHandler::HIBERNATING;
     $current_status = $this->getStatus();
     // Update the status if need be, but don't do it if we're stopping.
-    if ($status != $current_status && ($current_status == StatusHandler::HIBERNATING || $current_status == StatusHandler::STARTED)) {
-      if ($status == StatusHandler::STARTED) {
+    if ($status != $current_status && ($current_status == StatusHandler::HIBERNATING || $current_status == StatusHandler::PROCESSING)) {
+      if ($status == StatusHandler::PROCESSING) {
         // If we're coming out of hibernation, reset the feedback timer.
         $this->lastfeedback = microtime(TRUE);
       }

@@ -7,7 +7,7 @@ class StatusHandler {
    * @var int
    */
   const STOPPED     = 'stopped';
-  const STARTED     = 'started';
+  const PROCESSING  = 'processing';
   const HIBERNATING = 'hibernating';
   const REFORKING   = 'reforking';
   const STOPPING    = 'stopping';

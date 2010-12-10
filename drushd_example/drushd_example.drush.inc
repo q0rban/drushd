@@ -89,7 +89,8 @@ function drushd_example_drush_command() {
     'description' => 'Return or set whether node access grants need to be rebuilt.',
     'arguments' => array(
       'value' => 'Optional value to set node access needs rebuild to, either 0 or 1.'
-    )
+    ),
+    'aliases' => array('nanr'),
   );
 
   return $items;
