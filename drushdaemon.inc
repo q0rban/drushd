@@ -359,7 +359,7 @@ class DrushDaemon {
       drush_log(dt('The process Id for this process is !pid', array('!pid' => $pid)), 'ok');
     }
     if ($this->getStatus() == StatusHandler::HIBERNATING) {
-      drush_log(dt('Last hibernation cycle was at @date.', array('@date' => date("H:i:s", $this->statusHandler->getLastWritten()))), 'ok');
+      drush_log(dt('Last hibernation cycle was at @date.', array('@date' => date("H:i:s", $this->statusHandler->getWrittenTime()))), 'ok');
     }
     if (isset($this->statusHandler->memoryPeakUsage)) {
       $dt_args = array(

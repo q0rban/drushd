@@ -32,8 +32,8 @@ class StatusHandler {
    *
    * @var int
    */
-  public $lastWritten;
-  public function getLastWritten() { return $this->lastWritten; }
+  public $lastWrittenTime;
+  public function getLastWrittenTime() { return $this->lastWrittenTime; }
 
   /**
    * A formatted string of the current peak memory usage.
@@ -92,6 +92,14 @@ class StatusHandler {
    * @var int
    */
   protected $statusTTL;
+
+  /**
+   * The timestamp of when the status was written to disk.
+   *
+   * @var int
+   */
+  public $writtenTime;
+  public function getWrittenTime() { return $this->writtenTime; }
 
   /**
    * Constructor.
@@ -183,9 +191,12 @@ class StatusHandler {
       $this->getStatus(TRUE);
     }
     $file = fopen($this->statusFilename, 'w');
+    if (isset($this->writtenTime)) {
+      $this->lastWrittenTime = $this->writtenTime;
+    }
+    $this->writtenTime = time();
     fwrite($file, $this);
     fclose($file);
-    $this->lastWritten = time();
     drush_log(dt('The status file has been written.'));
   }
 
