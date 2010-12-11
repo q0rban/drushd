@@ -33,6 +33,7 @@ function drushd_example_drush_command() {
     'command-hook' => 'drushd',
 
     // Everything below here is just typical drush command parameters.
+    'bootstrap' => DRUSH_BOOTSTRAP_DRUPAL_DATABASE,
     'description' => 'Daemon to rebuild node access permissions.',
     'drupal dependencies' => array('node'),
     'aliases' => array('nar'),
