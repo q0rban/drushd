@@ -17,7 +17,7 @@ Then, run this command to start the node access rebuild daemon.
     # To run the command, logging feedback every 60 seconds.
     drush nar start --feedback="60 seconds"
     # To run the command, with verbose logging and feedback.
-    drush nar start --verbose --feedback
+    drush nar start --verbose --feedback="100 items"
 
 -------------------
 SEE WHATS HAPPENING
