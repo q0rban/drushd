@@ -171,7 +171,7 @@ class StatusHandler {
       // Write the file, without re-reading from disk first.
       $this->writeStatusFile(FALSE);
       if ($log) {
-        $this->logStatus('ok', "The @drush-cmd process state has changed to `@status`.");
+        $this->logStatus('ok', "The @drush-cmd daemon state has changed to `@status`.");
       }
     }
     else {
@@ -248,7 +248,7 @@ class StatusHandler {
       );
     }
     if (!isset($message)) {
-      $message = 'The @drush-cmd process is currently @status.';
+      $message = 'The @drush-cmd daemon is currently @status.';
     }
 
     drush_log(dt($message, $t_args), $type);

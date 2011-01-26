@@ -48,6 +48,13 @@ class DrushDaemon {
   protected $drushCommandArray;
 
   /**
+   * The filepath to store the log and status files to.
+   *
+   * @var string
+   */
+  protected $filepath;
+
+  /**
    * Frequency and frequency units, for logging.
    *
    * @var int
@@ -183,6 +190,7 @@ class DrushDaemon {
     $this->outputHandler = new OutputHandler($this->logFilename);
     $this->outputHandler->start();
 
+    // @todo, actually add some error handling inside the command methods. ;)
     try {
       $this->callCommandMethod();
     } catch (Exception $e) {
@@ -258,7 +266,7 @@ class DrushDaemon {
         // If we've exceeded at our refork limit, and it's less than a minute,
         // throw an error and stop the process.
         if ($duration < 1) {
-          drush_log(dt('The refork limit has been exceeded for this process. Please check the memory requirements and available memory and try again.'), 'error');
+          drush_log(dt('The refork limit has been exceeded for this daemon. Please check the memory requirements and available memory and try again.'), 'error');
           $this->statusHandler->reforks = NULL;
           $this->setStatus(StatusHandler::STOPPED);
           $this->frontendReturn = 1;
@@ -353,9 +361,9 @@ class DrushDaemon {
    * Return a status about the current process.
    */
   protected function status() {
-    $this->statusHandler->logStatus('success');
+    $this->statusHandler->logStatus('ok');
     if ($pid = $this->statusHandler->getPid()) {
-      drush_log(dt('The process Id for this process is !pid', array('!pid' => $pid)), 'ok');
+      drush_log(dt('The process Id for this daemon is !pid.', array('!pid' => $pid)), 'ok');
     }
     if ($this->getStatus() == StatusHandler::HIBERNATING) {
       drush_log(dt('Last hibernation cycle was at @date.', array('@date' => date("H:i:s", $this->statusHandler->getWrittenTime()))), 'ok');
@@ -365,7 +373,7 @@ class DrushDaemon {
         '!peak' => $this->statusHandler->memoryPeakUsage,
         '!limit' => format_size($this->getMemoryLimit())
       );
-      drush_log(dt('The last recorded peak memory usage was !peak of limit !limit', $dt_args), 'ok');
+      drush_log(dt('The last recorded peak memory usage was !peak of limit !limit.', $dt_args), 'ok');
     }
     if (drush_get_context('DRUSH_VERBOSE')) {
       drush_print($this->statusHandler);
@@ -471,7 +479,7 @@ class DrushDaemon {
     $timeout = drush_get_option('timeout', 45);
     if ($current_status == StatusHandler::HIBERNATING && !$queue) {
       $delay = $this->hibernateDuration > 60 ? ceil($this->hibernateDuration / 60) .' minute' : $this->hibernateDuration .' second';
-      drush_log(dt('This process is currently hibernating. Expect about a @delay delay.', array('@delay' => $delay)), 'warning');
+      drush_log(dt('This daemon is currently hibernating. Expect about a @delay delay.', array('@delay' => $delay)), 'warning');
       $opts = array("I'll wait around, thanks.", "Just queue it up and get me the heck out of here!");
       $choice = drush_choice($opts, dt('Watcha wanna do?'));
       if ($choice === 1) {
@@ -527,7 +535,7 @@ class DrushDaemon {
    */
   protected function beginProcess() {
     $this->statusHandler->SetStatus(StatusHandler::PROCESSING, FALSE);
-    $this->statusHandler->logStatus('ok', 'The @drush-cmd process has begun processing.');
+    $this->statusHandler->logStatus('ok', 'The @drush-cmd daemon has begun processing.');
     $this->lastfeedback = microtime(TRUE);
 
     $this->total_processed = $this->total_successes =
@@ -616,7 +624,7 @@ class DrushDaemon {
    */
   protected function endProcess() {
     $this->statusHandler->SetStatus(StatusHandler::STOPPED, FALSE);
-    $this->statusHandler->logStatus('ok', 'The process has stopped.');
+    $this->statusHandler->logStatus('ok', 'The @drush-cmd daemon has stopped.');
   }
 
 
@@ -823,23 +831,36 @@ class DrushDaemon {
         return;
       }
     }
+    if ($filepath = drush_get_option('filepath')) {
+      $this->filePath = rtrim($filepath, '/');
+    }
+    if ($logfile = drush_get_option('logfile')) {
+      $this->logFilename = $logfile;
+    }
+    if ($statusfile = drush_get_option('statusfile')) {
+      $this->statusFilename = $statusfile;
+    }
   }
 
   /**
    * Detects safe filepaths for Logging and Status files.
    */
   protected function detectFilepaths() {
-    $path_aliases = _core_path_aliases();
-    $filepath = $path_aliases['%root'] .'/'. $path_aliases['%files'];
+    if (!isset($this->filepath)) {
+      $path_aliases = _core_path_aliases();
+
+      $this->filepath = $path_aliases['%root'] .'/'. $path_aliases['%files'];
+    }
+
     $name = 'drushd_'. str_replace('-', '_', $this->getDrushCommand());
 
     if (!isset($this->statusFilename)) {
       $filename = "$name.txt";
-      $this->statusFilename = "$filepath/$filename";
+      $this->statusFilename = "{$this->filepath}/{$filename}";
     }
     if (!isset($this->logFilename)) {
       $filename = "$name.log";
-      $this->logFilename = "$filepath/$filename";
+      $this->logFilename = "{$this->filepath}/{$filename}";
     }
   }
 
