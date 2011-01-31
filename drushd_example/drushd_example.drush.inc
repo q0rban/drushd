@@ -38,6 +38,7 @@ function drushd_example_drush_command() {
     'drupal dependencies' => array('node'),
     'aliases' => array('nar'),
     'options' => array(
+      '--failure-threshold' => 'Float value representing the percentage of allowable failed items.',
       '--feedback' => 'Frequency of progress messages, in seconds or items processed.',
     ),
     // Good to include these arguments, so people know how to use the daemon.
@@ -49,10 +50,11 @@ function drushd_example_drush_command() {
       'show-log' => 'Show the log file.',
     ),
     'examples' => array(
-      'drush nar start'                         => 'Start the daemon.',
-      'drush nar start --feedback="100 items"'  => 'Log a status message every 100 nodes.',
-      'drush nar start --feedback="60 seconds"' => 'Log a status message every 60 seconds.',
-      'drush nar start --verbose'               => 'Log verbosely.',
+      'drush nar start'                            => 'Start the daemon.',
+      'drush nar start --feedback="100 items"'     => 'Log a status message every 100 nodes.',
+      'drush nar start --feedback="60 seconds"'    => 'Log a status message every 60 seconds.',
+      'drush nar start --verbose'                  => 'Log verbosely.',
+      'drush nar start --failure-threshold="0.05"' => 'Set the item failure threshold to 5%',
       ' '   => '',
       'drush nar status' => 'Show the current status of the daemon.',
       '  '  => '',

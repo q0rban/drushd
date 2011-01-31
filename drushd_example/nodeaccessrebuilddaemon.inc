@@ -7,7 +7,16 @@
 
 class NodeAccessRebuildDaemon extends ProcessItemsDaemon {
   /**
-   * The actual process.
+   * Process failure threshold. Decrease the default value to 1%. If we're getting
+   * errors, something is really wrong, and we should probably stop before we hose
+   * the site.
+   *
+   * @var float
+   */
+  protected $failureThreshold = 0.01;
+
+  /**
+   * Implementation of process method, to iterate over process items.
    */
   protected function process() {
     // This loads up 100 nodes to process.
@@ -16,23 +25,24 @@ class NodeAccessRebuildDaemon extends ProcessItemsDaemon {
     // Delete the old records in one foul swoop.
     db_query("DELETE FROM {node_access} WHERE nid IN (%s)", implode(',', $nids));
 
-    foreach ($nids as $nid) {
-      // To preserve database integrity, only aquire grants if the node
-      // loads successfully.
-      if ($node = node_load($nid, NULL, TRUE)) {
-        //drush_print($nid);
-        node_access_acquire_grants($node);
-        $this->total_successes++;
-        $this->successes_since_feedback++;
-      }
-      $this->total_processed++;
-      $this->processed_since_feedback++;
+    return parent::process();
+  }
+
+  /**
+   * Where the actual item processing occurs. Must return TRUE for a successful
+   * process operation.
+   *
+   * @param $nid
+   *   The node id to rebuild permissions on.
+   * @return
+   *   Boolean TRUE if the item was successfully processed.
+   */
+  protected function processItem($nid) {
+    if ($node = node_load($nid)) {
+      node_access_acquire_grants($node);
+      return TRUE;
     }
-
-    $this->unSetItems($nids);
-
-    // Only return FALSE if something happens that should stop the daemon.
-    return TRUE;
+    return FALSE;
   }
 
   /**
