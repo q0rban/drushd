@@ -40,6 +40,15 @@ function drushd_example_drush_command() {
     'options' => array(
       '--failure-threshold' => 'Float value representing the percentage of allowable failed items.',
       '--feedback' => 'Frequency of progress messages, in seconds or items processed.',
+      '--filepath' => "The filepath of where log and status files should be saved. USE WITH CAUTION. If you fail to specify these same log files every time you run the command, you run the risk of multiple daemons running for a single site. It is recommended to use a drushrc.php file instead:
+
+\$command_specific['nar'] = array(
+  // Save all files to a log directory.
+  'filepath' => '/var/www/html/example.com/log',
+  // Optionally, specify the exact filenames:
+  //'logfile' => '/var/log/example-com-nar.log',
+  //'statusfile' => '/var/run/example-com-nar.status',
+);",
     ),
     // Good to include these arguments, so people know how to use the daemon.
     'arguments' => array(
