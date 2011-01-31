@@ -65,7 +65,7 @@ class ProcessItemsDaemon extends DrushDaemon {
     $count = count($items);
     // We only want to check failure rate if we actually have enough process
     // items to make it worth our while.
-    $check_failure = $count * $this->failureThreshold > 1;
+    $check_failure = $count > 1 || $this->failureThreshold == 0;
 
     foreach ($items as $key => $item) {
       if ($this->processItem($item)) {
