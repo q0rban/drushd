@@ -74,4 +74,21 @@ OTHER THINGS OF NOTE
 The status file and log are saved to the drupal files directory. They will be
 named drushd_node_access_rebuild.log and drushd_node_access_rebuild.txt.
 
+If you would like to store these files in a separate directory, it is recommended
+to use a drushrc.php file to do so. Inside the drushrc.php file, add an adaptation
+of the following:
+
+    <?php
+    $command_specific['nar'] = array(
+      // Save all files to a log directory.
+      'filepath' => '/var/www/html/example.com/log',
+      // Optionally, specify the exact filenames:
+      //'logfile' => '/var/log/example-com-nar.log',
+      //'statusfile' => '/var/run/example-com-nar.status',
+    );
+    ?>
+
+Keep in mind, the user running the command will need write privileges to those
+files.
+
 
