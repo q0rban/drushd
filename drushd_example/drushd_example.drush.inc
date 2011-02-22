@@ -112,32 +112,27 @@ function drushd_example_drush_command() {
  * Callback for drush node-access-needs-rebuild.
  */
 function drush_drushd_example_node_access_needs_rebuild() {
-  // If we are in the backend context, print the status directly.
-  if (drush_get_context('DRUSH_BACKEND')) {
-    drush_print((string) node_access_needs_rebuild());
-    return;
-  }
-
   if (($args = drush_get_arguments()) && count($args) > 1) {
     node_access_needs_rebuild((bool) $args[1]);
     drush_log(dt('Node access needs rebuild has been set to !val', array('!val' => $args[1])));
   }
   $message = 'Node access grants do not need to be rebuilt.';
-  if (_drushd_example_node_access_needs_rebuild() == 1) {
+  if (_drushd_example_node_access_needs_rebuild()) {
     $message = 'Node access grants need to be rebuilt.';
   }
   drush_log(dt($message), 'ok');
 }
 
 /**
- * Retrieve the current bot status, clearing the variable cache first.
+ * Retrieve the current status, clearing the variable cache first.
  */
 function _drushd_example_node_access_needs_rebuild() {
   // We first clear the variables cache and then invoke the command to get a
   // fresh status. Otherwise the static variable may contain stale data.
-  cache_clear_all('variables', 'cache');
-  $ret = drush_backend_invoke('node-access-needs-rebuild', array(), 'GET', FALSE);
-  return $ret['output'];
+  global $conf;
+  unset($conf['node_access_needs_rebuild']);
+  $conf = variable_init($conf, TRUE);
+  return node_access_needs_rebuild();
 }
 
 /**
