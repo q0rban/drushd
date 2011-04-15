@@ -4,12 +4,10 @@ GET IT INSTALLED
 
 To install the node access rebuilding daemon, do the following:
 
-    # Make the .drush directory in your user's home if it doesn't exist.
-    mkdir ~/.drush
-    cd ~/.drush
-    git clone git://github.com/q0rban/drushd.git
+    drush dl drushd
 
-Then, run this command to start the node access rebuild daemon.
+This will install drushd into a .drush directory by default. Then, run this
+command to start the node access rebuild daemon.
 
     # The command in its simplest form, but you may prefer one of these other
     # options, below.
